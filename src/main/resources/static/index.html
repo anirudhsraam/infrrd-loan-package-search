@@ -22,7 +22,7 @@
   </div>
   <div class="topbar-right">
     <span class="environment-pill"><span class="environment-dot"></span> REVIEW WORKSPACE</span>
-    <span id="status-pill" class="status-pill is-loading"><span class="status-indicator"></span><span id="status-text">Loading package</span></span>
+    <span id="status-pill" class="status-pill is-loading" role="status" aria-live="polite"><span class="status-indicator"></span><span id="status-text">Loading package</span></span>
   </div>
 </header>
 
@@ -81,7 +81,7 @@
           <button id="results-tab" class="rail-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="results-panel" data-tab="results">Search results <span id="tab-result-count">0</span></button>
           <button id="documents-tab" class="rail-tab" type="button" role="tab" aria-selected="false" aria-controls="documents-panel" data-tab="documents">Documents <span id="tab-document-count">0</span></button>
         </div>
-        <section id="results-panel" class="rail-panel" role="tabpanel" aria-labelledby="results-tab">
+        <section id="results-panel" class="rail-panel" role="tabpanel" tabindex="0" aria-labelledby="results-tab">
           <div class="panel-toolbar">
             <div><h3 id="results-heading">Ready when you are</h3><p id="result-range">Search the entire loan package to find evidence.</p></div>
             <span id="results-badge" class="subtle-badge">560 PAGES</span>
@@ -99,7 +99,7 @@
             <div id="timing-row" class="timing-grid"></div>
           </details>
         </section>
-        <section id="documents-panel" class="rail-panel documents-panel" role="tabpanel" aria-labelledby="documents-tab" hidden>
+        <section id="documents-panel" class="rail-panel documents-panel" role="tabpanel" tabindex="0" aria-labelledby="documents-tab" hidden>
           <label class="sr-only" for="document-filter">Filter documents</label>
           <div class="document-filter">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"></circle><path d="m16 16 4.4 4.4"></path></svg>
@@ -133,7 +133,7 @@
         <span class="context-separator">·</span>
         <span id="viewer-version">VERSION —</span>
         <span class="context-spacer"></span>
-        <span id="text-status" class="text-status">Awaiting page selection</span>
+        <span id="text-status" class="text-status" role="status" aria-live="polite">Awaiting page selection</span>
       </div>
       <div class="source-viewer">
         <iframe id="pdf-frame" title="Original loan package PDF" src="about:blank" hidden></iframe>

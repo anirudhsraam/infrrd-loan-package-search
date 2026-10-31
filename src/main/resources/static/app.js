@@ -11,11 +11,12 @@
     hits: [],
     maxResultCount: 5000,
     searchRequestId: 0,
+    searchController: null,
     pageRequestId: 0,
   };
 
-  async function api(path) {
-    const response = await fetch(path, { headers: { Accept: 'application/json' } });
+  async function api(path, options = {}) {
+    const response = await fetch(path, { ...options, headers: { Accept: 'application/json' } });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.message || `Request failed (${response.status})`);
     return payload;
@@ -54,8 +55,23 @@
     byId('documents-tab').classList.toggle('is-active', !isResults);
     byId('results-tab').setAttribute('aria-selected', String(isResults));
     byId('documents-tab').setAttribute('aria-selected', String(!isResults));
+    byId('results-tab').tabIndex = isResults ? 0 : -1;
+    byId('documents-tab').tabIndex = isResults ? -1 : 0;
     byId('results-panel').hidden = !isResults;
     byId('documents-panel').hidden = isResults;
+  }
+
+  function resetSearchResults() {
+    state.query = '';
+    state.hits = [];
+    state.resultPage = 0;
+    byId('results').setAttribute('aria-busy', 'false');
+    byId('tab-result-count').textContent = '0';
+    byId('results-heading').textContent = 'Ready when you are';
+    byId('result-range').textContent = 'Search the entire loan package to find evidence.';
+    byId('results').innerHTML = '<div class="rail-empty"><div class="empty-icon">⌕</div><strong>Start with a document detail</strong><p>Search for a borrower, amount, form, disclosure, or phrase to find the source page.</p></div>';
+    byId('pagination').hidden = true;
+    byId('performance-panel').hidden = true;
   }
 
   function renderPackageDetails(details) {
@@ -184,30 +200,67 @@
     const query = byId('query').value.trim();
     if (!query) return;
     const requestId = ++state.searchRequestId;
+    state.searchController?.abort();
+    state.searchController = new AbortController();
     state.query = query;
     byId('search-button').disabled = true;
     byId('search-button').textContent = 'Searching…';
     byId('clear-search').hidden = false;
     selectTab('results');
+    byId('results').setAttribute('aria-busy', 'true');
     byId('results').innerHTML = '<div class="loading-line">Searching extracted text across the loan package…</div>';
     try {
-      const response = await api(`/api/search?q=${encodeURIComponent(query)}&page=${nextPage}&size=${state.pageSize}`);
+      const response = await api(`/api/search?q=${encodeURIComponent(query)}&page=${nextPage}&size=${state.pageSize}`, {
+        signal: state.searchController.signal,
+      });
       if (requestId !== state.searchRequestId) return;
       state.resultPage = nextPage;
       renderResults(response);
     } catch (error) {
       if (requestId !== state.searchRequestId) return;
       byId('results').innerHTML = `<div class="rail-empty"><strong>Search could not be completed</strong><p>${escapeHtml(error.message)}</p></div>`;
+      byId('results').setAttribute('aria-busy', 'false');
+      state.hits = [];
+      byId('tab-result-count').textContent = '0';
       byId('results-heading').textContent = 'Search error';
       byId('result-range').textContent = 'Review the query and try again.';
       byId('pagination').hidden = true;
       byId('performance-panel').hidden = true;
     } finally {
       if (requestId === state.searchRequestId) {
+        state.searchController = null;
         byId('search-button').disabled = false;
         byId('search-button').textContent = 'Search';
       }
     }
+  }
+
+  function cancelSearch() {
+    state.searchRequestId++;
+    state.searchController?.abort();
+    state.searchController = null;
+    byId('search-button').disabled = false;
+    byId('search-button').textContent = 'Search';
+  }
+
+  function clearSearch() {
+    byId('query').value = '';
+    byId('clear-search').hidden = true;
+    cancelSearch();
+    resetSearchResults();
+    byId('query').focus();
+  }
+
+  function openPageFromInput() {
+    const input = byId('page-number');
+    const pageNumber = Number(input.value);
+    if (!Number.isInteger(pageNumber) || !state.package
+        || pageNumber < 1 || pageNumber > state.package.manifest.pageCount) {
+      byId('text-status').textContent = `Enter a page from 1 to ${state.package?.manifest.pageCount ?? '—'}.`;
+      input.focus();
+      return;
+    }
+    showPage(pageNumber);
   }
 
   async function showPage(pageNumber, updatePdf = true) {
@@ -247,13 +300,14 @@
     runSearch(0);
   });
   byId('query').addEventListener('input', () => {
-    byId('clear-search').hidden = byId('query').value.length === 0;
+    const isEmpty = byId('query').value.length === 0;
+    byId('clear-search').hidden = isEmpty;
+    if (isEmpty) {
+      cancelSearch();
+      resetSearchResults();
+    }
   });
-  byId('clear-search').addEventListener('click', () => {
-    byId('query').value = '';
-    byId('clear-search').hidden = true;
-    byId('query').focus();
-  });
+  byId('clear-search').addEventListener('click', clearSearch);
   document.querySelectorAll('[data-query]').forEach((button) => {
     button.addEventListener('click', () => {
       byId('query').value = button.dataset.query;
@@ -264,11 +318,21 @@
   document.querySelectorAll('[data-tab]').forEach((button) => {
     button.addEventListener('click', () => selectTab(button.dataset.tab));
   });
+  byId('results-tab').parentElement.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const tabs = [byId('results-tab'), byId('documents-tab')];
+    const nextIndex = event.key === 'Home' ? 0
+      : event.key === 'End' ? tabs.length - 1
+        : (tabs.indexOf(document.activeElement) + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[nextIndex].focus();
+    selectTab(tabs[nextIndex].dataset.tab);
+  });
   byId('prev-page').addEventListener('click', () => runSearch(Math.max(0, state.resultPage - 1)));
   byId('next-page').addEventListener('click', () => runSearch(state.resultPage + 1));
-  byId('go-page').addEventListener('click', () => showPage(Number(byId('page-number').value)));
+  byId('go-page').addEventListener('click', openPageFromInput);
   byId('page-number').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') showPage(Number(event.target.value));
+    if (event.key === 'Enter') openPageFromInput();
   });
   byId('page-prev').addEventListener('click', () => showPage(state.selectedPage - 1));
   byId('page-next').addEventListener('click', () => showPage(state.selectedPage + 1));
@@ -276,16 +340,18 @@
     const query = event.target.value.trim().toLowerCase();
     byId('document-tree').querySelectorAll('.tree-group').forEach((group) => {
       let visibleDocs = 0;
+      const matchesType = group.dataset.type.includes(query);
       group.querySelectorAll('.tree-doc').forEach((row) => {
-        const visible = row.textContent.toLowerCase().includes(query);
+        const visible = !query || matchesType || row.textContent.toLowerCase().includes(query);
         row.hidden = !visible;
         if (visible) visibleDocs++;
       });
-      group.hidden = query ? visibleDocs === 0 && !group.dataset.type.includes(query) : false;
+      group.hidden = query ? visibleDocs === 0 : false;
       if (query && !group.hidden) group.open = true;
     });
   });
 
+  selectTab('results');
   api('/api/package')
     .then(renderPackageDetails)
     .catch((error) => {
