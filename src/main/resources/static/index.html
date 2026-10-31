@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#111d33">
+  <meta name="description" content="Infrrd mortgage document review workspace — search a loan package and navigate directly to source evidence.">
+  <title>Infrrd · Mortgage Review Workspace</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Infrrd Mortgage Review home">
+    <span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i></span>
+    <span class="brand-word">infrrd</span>
+  </a>
+  <div class="topbar-divider" aria-hidden="true"></div>
+  <div class="product-heading">
+    <span class="eyebrow">MORTGAGE &amp; LENDING</span>
+    <strong>Loan Package Review</strong>
+  </div>
+  <div class="topbar-right">
+    <span class="environment-pill"><span class="environment-dot"></span> REVIEW WORKSPACE</span>
+    <span id="status-pill" class="status-pill is-loading"><span class="status-indicator"></span><span id="status-text">Loading package</span></span>
+  </div>
+</header>
+
+<main class="app-shell">
+  <section class="package-strip" aria-label="Loan package overview">
+    <div class="package-identity">
+      <div class="package-icon" aria-hidden="true">⌂</div>
+      <div class="package-copy">
+        <span class="eyebrow">ACTIVE LOAN FILE</span>
+        <h1 id="package-title">Loading loan package…</h1>
+        <p id="package-subtitle">Preparing documents and source references</p>
+      </div>
+    </div>
+    <div class="package-stats">
+      <div class="stat"><strong id="stat-pages">—</strong><span>PDF pages</span></div>
+      <div class="stat"><strong id="stat-documents">—</strong><span>Documents</span></div>
+      <div class="stat"><strong id="stat-missing">—</strong><span>Pages without text</span></div>
+      <div class="stat"><strong id="stat-indexed">—</strong><span>Indexed terms</span></div>
+    </div>
+  </section>
+
+  <section class="workspace" aria-label="Loan package review workspace">
+    <aside class="left-rail">
+      <section class="search-card" aria-labelledby="search-title">
+        <div class="card-heading">
+          <div>
+            <span class="eyebrow">FIND SOURCE EVIDENCE</span>
+            <h2 id="search-title">Search this loan file</h2>
+          </div>
+          <span class="search-scope">ALL DOCUMENTS</span>
+        </div>
+        <form id="search-form" role="search">
+          <label class="sr-only" for="query">Search the loan package</label>
+          <div class="search-control">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"></circle><path d="m16 16 4.4 4.4"></path></svg>
+            <input id="query" name="q" autocomplete="off" maxlength="256" placeholder='Search e.g. "cash to close"' required>
+            <button id="clear-search" class="clear-search" type="button" aria-label="Clear search" hidden>×</button>
+            <button id="search-button" class="search-button" type="submit">Search</button>
+          </div>
+        </form>
+        <p class="search-guidance">Search across extracted page text and jump to the exact source page.</p>
+        <div class="query-examples" aria-label="Search examples">
+          <button type="button" data-query='"cash to close"'>Exact phrase</button>
+          <button type="button" data-query="income AND assets">AND</button>
+          <button type="button" data-query="escrow OR insurance">OR</button>
+          <button type="button" data-query="sign*">Wildcard</button>
+        </div>
+        <details class="syntax-help">
+          <summary>Search syntax</summary>
+          <p><code>AND</code>, <code>OR</code>, <code>NOT</code>, parentheses, quoted phrases, and suffix wildcards such as <code>sign*</code>. Adjacent words are combined with AND. Operators are case-insensitive.</p>
+        </details>
+      </section>
+
+      <section class="navigation-card">
+        <div class="rail-tabs" role="tablist" aria-label="Workspace navigation">
+          <button id="results-tab" class="rail-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="results-panel" data-tab="results">Search results <span id="tab-result-count">0</span></button>
+          <button id="documents-tab" class="rail-tab" type="button" role="tab" aria-selected="false" aria-controls="documents-panel" data-tab="documents">Documents <span id="tab-document-count">0</span></button>
+        </div>
+        <section id="results-panel" class="rail-panel" role="tabpanel" aria-labelledby="results-tab">
+          <div class="panel-toolbar">
+            <div><h3 id="results-heading">Ready when you are</h3><p id="result-range">Search the entire loan package to find evidence.</p></div>
+            <span id="results-badge" class="subtle-badge">560 PAGES</span>
+          </div>
+          <div id="results" class="results-list" aria-live="polite">
+            <div class="rail-empty"><div class="empty-icon">⌕</div><strong>Start with a document detail</strong><p>Search for a borrower, amount, form, disclosure, or phrase to find the source page.</p></div>
+          </div>
+          <div id="pagination" class="pagination" hidden>
+            <button id="prev-page" type="button" aria-label="Previous results page">←</button>
+            <span id="page-label"></span>
+            <button id="next-page" type="button" aria-label="Next results page">→</button>
+          </div>
+          <details id="performance-panel" class="performance-panel" hidden>
+            <summary><span>Search performance</span><span id="performance-mode">—</span></summary>
+            <div id="timing-row" class="timing-grid"></div>
+          </details>
+        </section>
+        <section id="documents-panel" class="rail-panel documents-panel" role="tabpanel" aria-labelledby="documents-tab" hidden>
+          <label class="sr-only" for="document-filter">Filter documents</label>
+          <div class="document-filter">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"></circle><path d="m16 16 4.4 4.4"></path></svg>
+            <input id="document-filter" type="search" placeholder="Filter by document name or type…" autocomplete="off">
+          </div>
+          <div class="tree-summary"><span id="document-summary">Document types and versions</span><span>PAGE RANGES</span></div>
+          <div id="document-tree" class="document-tree"><div class="loading-line">Loading document index…</div></div>
+          <p class="tree-footnote">Select a document to open its first page. Versions and physical page ranges are retained from the package manifest.</p>
+        </section>
+      </section>
+    </aside>
+
+    <section class="review-stage" aria-label="Source document viewer">
+      <div class="viewer-header">
+        <div class="viewer-heading">
+          <span class="eyebrow">SOURCE EVIDENCE</span>
+          <h2 id="viewer-title">Select a search result</h2>
+          <p id="viewer-subtitle">The source viewer will open at the selected physical PDF page.</p>
+        </div>
+        <div class="page-controls" aria-label="Page navigation">
+          <button id="page-prev" type="button" aria-label="Previous PDF page">‹</button>
+          <label for="page-number">PAGE</label>
+          <input id="page-number" type="number" min="1" value="1" inputmode="numeric">
+          <span id="page-total">/ —</span>
+          <button id="go-page" class="go-page" type="button">Go</button>
+          <button id="page-next" type="button" aria-label="Next PDF page">›</button>
+        </div>
+      </div>
+      <div class="viewer-context">
+        <span id="viewer-document-type">SOURCE DOCUMENT</span>
+        <span class="context-separator">·</span>
+        <span id="viewer-version">VERSION —</span>
+        <span class="context-spacer"></span>
+        <span id="text-status" class="text-status">Awaiting page selection</span>
+      </div>
+      <div class="source-viewer">
+        <iframe id="pdf-frame" title="Original loan package PDF" src="about:blank" hidden></iframe>
+        <div id="pdf-empty" class="pdf-placeholder" hidden>
+          <div class="pdf-placeholder-icon">▤</div>
+          <strong>Original PDF not attached</strong>
+          <p>The extracted text layer is available below. Add the supplied PDF to <code>data/pdf/loan-package.pdf</code> to enable visual page preview.</p>
+        </div>
+      </div>
+      <section class="evidence-panel" aria-labelledby="evidence-title">
+        <div class="evidence-heading">
+          <div><span class="eyebrow">SEARCHABLE EVIDENCE</span><h3 id="evidence-title">Extracted page text</h3></div>
+          <span id="evidence-length" class="evidence-length">—</span>
+        </div>
+        <pre id="page-text" tabindex="0">Choose a page from the search results or document index. Extracted text will be shown here with its original physical page reference.</pre>
+      </section>
+    </section>
+  </section>
+  <footer class="app-footer"><span>INFRRD · MORTGAGE DOCUMENT REVIEW</span><span>Source-linked search prototype · No OCR or automated underwriting performed</span></footer>
+</main>
+<script src="/app.js" defer></script>
+</body>
+</html>

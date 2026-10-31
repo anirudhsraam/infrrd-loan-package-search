@@ -1,0 +1,16 @@
+AI tool: ChatGPT (OpenAI)
+
+Session summary (manually compiled; the original AGENTS.md logging hook was not supplied):
+
+1. User request: Build a Spring Boot backend and browser UI for full-text search across loan packages, including ranking, Boolean operators, phrase support, and pagination. Read the assignment before implementation.
+   Summary: Inspected the supplied assignment brief, 560-page PDF, and 560-section extracted-layout text. Confirmed the separately referenced assignment ZIP, original package.json, starter code, and AGENTS.md were not supplied.
+
+2. User request: Include one ZIP with source code, a short README covering design/performance/limitations, and tests for critical logic. Follow industry best coding practices.
+   Summary: Created a Spring Boot application structure, page-level positional index and BM25-style ranking, query parser for AND/OR/NOT/phrases/prefix wildcards, browser UI, editable package manifest with request-time change detection, bounded caches/input limits, tests, benchmark harness, and documentation.
+
+3. Validation summary: Ran the dependency-free Java core checks and benchmark using the supplied layout text and installed JDK 21. The core checks passed. Maven was not installed and outbound Maven Central DNS/network access was unavailable, so the Spring Boot application and JUnit suite could not be built or run in this environment.
+
+4. User request: Tailor the entire application for Infrrd.ai, expand the tests to about 20, and improve LLD, SOLID/DRY/KISS adherence, class/method focus, and reviewer UI/UX.
+   Summary: Rebranded package coordinates and Java namespaces to ai.infrrd; separated query parsing/AST/tokenization, manifest validation, and page text loading; hardened bounded caching, path validation, page mapping and missing-text semantics; redesigned the browser workspace around loan-package review and source evidence; and added package-build stage telemetry.
+
+5. Validation summary: 29 JUnit test cases are included. The 15 dependency-free search checks pass; Java 21 source compilation checks pass with temporary API stubs; package manifest coverage and browser JavaScript syntax checks pass. Maven is unavailable in the implementation environment, so JUnit execution and the real Spring Boot dependency/runtime build remain unverified.
