@@ -13,6 +13,10 @@
     searchRequestId: 0,
     searchController: null,
     pageRequestId: 0,
+    evidenceText: '',
+    evidenceMessage: 'Choose a page from the search results or document index. Source text will appear here with its physical page reference.',
+    evidenceModeOriginal: false,
+    evidenceMatchIndex: 0,
   };
 
   async function api(path, options = {}) {
@@ -32,6 +36,212 @@
     return [...query.matchAll(/"([^"]+)"|([\p{L}\p{N}*]+)/gu)]
       .map((match) => (match[1] || match[2] || '').replace(/\*$/, ''))
       .filter((term) => term.length > 1 && !['and', 'or', 'not'].includes(term.toLowerCase()));
+  }
+
+  function parseEvidenceRows(text) {
+    const splitColumns = (line) => {
+      const cells = [];
+      const starts = [];
+      let start = 0;
+      for (const separator of line.matchAll(/[ \t]{3,}/g)) {
+        const segment = line.slice(start, separator.index);
+        const value = segment.trim();
+        if (value) {
+          cells.push(value.replace(/[ \t]+/g, ' '));
+          starts.push(start + segment.indexOf(value));
+        }
+        start = separator.index + separator[0].length;
+      }
+      const segment = line.slice(start);
+      const value = segment.trim();
+      if (value) {
+        cells.push(value.replace(/[ \t]+/g, ' '));
+        starts.push(start + segment.indexOf(value));
+      }
+      return { cells, starts };
+    };
+    const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n')
+      .map((line) => line.replace(/\s+$/, ''))
+      .filter((line) => line.trim())
+      .map((line) => ({ raw: line, ...splitColumns(line) }));
+    const blocks = [];
+    let index = 0;
+
+    while (index < lines.length) {
+      const header = lines[index];
+      const headerLabels = header.cells;
+      const hasLikelyColumnLabels = headerLabels.length >= 2
+        && !/[•●▪]/.test(header.raw)
+        && headerLabels.every((label) => label.length <= 60)
+        && headerLabels.some((label) => /\b(date|description|withdrawals?|deposits?|balance|account|institution|company|name|type|number|amount|payment|income|asset|credit|debit|value|quantity|rate|term|property|address|status|borrower|employer|source)\b/i.test(label))
+        && !headerLabels.some((label) => /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\$\s?\d/i.test(label));
+      const nextLines = lines.slice(index + 1, index + 4);
+      const hasDataRows = nextLines.length >= 2 && nextLines.every((line) =>
+        line.cells.length >= 2
+        && line.cells.length <= headerLabels.length
+        && (/\d|\$|[A-Z]{2,}/.test(line.raw) || line.cells.some((cell) => cell.length > 12)));
+
+      if (hasLikelyColumnLabels && hasDataRows) {
+        const starts = header.starts.slice(0, headerLabels.length);
+        const rows = [];
+        let dataIndex = index + 1;
+        while (dataIndex < lines.length) {
+          const current = lines[dataIndex];
+          const isTotal = /^(total|subtotal)\b/i.test(current.raw.trim());
+          if (isTotal || current.cells.length < 2 || current.cells.length > headerLabels.length) break;
+          const values = starts.map((start, columnIndex) => {
+            const end = starts[columnIndex + 1] ?? current.raw.length;
+            return current.raw.slice(start, end).replace(/[ \t]+/g, ' ').trim();
+          });
+          if (values.filter(Boolean).length < 2) break;
+          rows.push(values);
+          dataIndex++;
+        }
+        if (rows.length >= 2) {
+          blocks.push({ type: 'table', headers: headerLabels, rows });
+          index = dataIndex;
+          continue;
+        }
+      }
+
+      blocks.push({ type: 'text', text: header.raw.trim() });
+      index++;
+    }
+    return blocks;
+  }
+
+  function evidenceSearchText() {
+    if (state.evidenceModeOriginal) return state.evidenceText;
+    return parseEvidenceRows(state.evidenceText).map((block) => block.type === 'table'
+      ? [block.headers, ...block.rows].flat().join(' ')
+      : block.text).join(' ');
+  }
+
+  function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function renderEvidenceContent(container) {
+    const query = byId('evidence-find').value.trim();
+    let matchIndex = 0;
+    const renderCell = (value) => {
+      if (!query) return escapeHtml(value);
+      const segments = value.split(new RegExp(`(${escapeRegExp(query)})`, 'ig'));
+      return segments.map((segment, index) => {
+        const safeSegment = escapeHtml(segment);
+        if (index % 2 === 0) return safeSegment;
+        const activeClass = matchIndex++ === state.evidenceMatchIndex ? ' class="is-current-match"' : '';
+        return `<mark${activeClass}>${safeSegment}</mark>`;
+      }).join('');
+    };
+
+    if (!state.evidenceText) {
+      container.innerHTML = `<p class="evidence-message">${escapeHtml(state.evidenceMessage)}</p>`;
+    } else if (state.evidenceModeOriginal) {
+      container.textContent = state.evidenceText;
+      if (query) {
+        const text = container.textContent;
+        const parts = text.split(new RegExp(`(${escapeRegExp(query)})`, 'ig'));
+        container.innerHTML = parts.map((part, index) => {
+          const safePart = escapeHtml(part);
+          if (index % 2 === 0) return safePart;
+          const activeClass = matchIndex++ === state.evidenceMatchIndex ? ' class="is-current-match"' : '';
+          return `<mark${activeClass}>${safePart}</mark>`;
+        }).join('');
+      }
+    } else {
+        const blocks = parseEvidenceRows(state.evidenceText);
+        container.innerHTML = blocks.map((block) => {
+          if (block.type === 'text') {
+            return `<p class="evidence-page-line">${renderCell(block.text)}</p>`;
+          }
+          return `
+            <div class="evidence-table-wrap">
+              <table class="evidence-table">
+                <caption class="sr-only">Extracted data table from the selected source page.</caption>
+                <thead><tr>${block.headers.map((header) => `<th scope="col">${renderCell(header)}</th>`).join('')}</tr></thead>
+                <tbody>${block.rows.map((row) => `
+                  <tr>${block.headers.map((_, columnIndex) => `<td>${renderCell(row[columnIndex] ?? '')}</td>`).join('')}</tr>
+                `).join('')}</tbody>
+              </table>
+            </div>`;
+        }).join('');
+    }
+    container.classList.toggle('is-original', state.evidenceModeOriginal);
+    return matchIndex;
+  }
+
+  function renderEvidence() {
+    const query = byId('evidence-find').value.trim();
+    const text = evidenceSearchText();
+    const count = query ? (text.split(new RegExp(`(${escapeRegExp(query)})`, 'ig')).length - 1) / 2 : 0;
+    if (count) state.evidenceMatchIndex = Math.min(state.evidenceMatchIndex, count - 1);
+    else state.evidenceMatchIndex = 0;
+    renderEvidenceContent(byId('page-text'));
+    const dialogCount = renderEvidenceContent(byId('expanded-page-text'));
+    const hasText = Boolean(state.evidenceText);
+    byId('evidence-length').textContent = hasText
+      ? state.evidenceModeOriginal
+        ? `${state.evidenceText.length.toLocaleString()} characters · original`
+        : `${parseEvidenceRows(state.evidenceText).length.toLocaleString()} page sections`
+      : (state.evidenceMessage.startsWith('No text is available') ? 'TEXT UNAVAILABLE' : '—');
+    byId('evidence-mode').textContent = state.evidenceModeOriginal ? 'Show table view' : 'Show original text';
+    byId('evidence-mode').setAttribute('aria-pressed', String(state.evidenceModeOriginal));
+    byId('evidence-intro').textContent = state.evidenceModeOriginal
+      ? 'Original extraction with spacing preserved. This can be difficult to read; select “Show table view” to see recognized tables with their page headings.'
+      : 'Recognized tables use the headings found on the page. Other content is shown as page text; no column headings are guessed.';
+    byId('evidence-find-count').textContent = query
+      ? `${count ? state.evidenceMatchIndex + 1 : 0} of ${count}`
+      : '';
+    byId('evidence-find').disabled = !hasText;
+    byId('evidence-find-prev').disabled = count === 0;
+    byId('evidence-find-next').disabled = count === 0;
+    byId('evidence-copy').disabled = !hasText;
+    byId('evidence-mode').disabled = !hasText;
+    if (byId('evidence-dialog').open && dialogCount) {
+      const activeMark = byId('expanded-page-text').querySelector('mark.is-current-match');
+      activeMark?.scrollIntoView({ block: 'center' });
+    }
+  }
+
+  function moveEvidenceMatch(direction) {
+    const count = [...byId('page-text').querySelectorAll('mark')].length;
+    if (!count) return;
+    state.evidenceMatchIndex = (state.evidenceMatchIndex + direction + count) % count;
+    renderEvidence();
+    const container = byId('evidence-dialog').open ? byId('expanded-page-text') : byId('page-text');
+    container.querySelector('mark.is-current-match')?.scrollIntoView({ block: 'center' });
+  }
+
+  async function copyEvidenceText() {
+    const text = state.evidenceText
+      ? (state.evidenceModeOriginal
+        ? state.evidenceText
+        : parseEvidenceRows(state.evidenceText).map((block) => block.type === 'table'
+          ? [block.headers.join('\t'), ...block.rows.map((row) => row.join('\t'))].join('\n')
+          : block.text).join('\n'))
+      : state.evidenceMessage;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error('Clipboard access is unavailable');
+      }
+      byId('evidence-status').textContent = 'Source text copied.';
+    } catch {
+      const copyField = document.createElement('textarea');
+      copyField.value = text;
+      copyField.setAttribute('readonly', '');
+      copyField.style.position = 'fixed';
+      copyField.style.opacity = '0';
+      document.body.append(copyField);
+      copyField.select();
+      const copied = document.execCommand('copy');
+      copyField.remove();
+      byId('evidence-status').textContent = copied
+        ? 'Source text copied.'
+        : 'Could not copy the text. Select it and copy using your keyboard.';
+    }
   }
 
   function highlightSnippet(snippet, query) {
@@ -272,7 +482,11 @@
     if (updatePdf && state.package.pdfAvailable) {
       byId('pdf-frame').src = `${state.package.pdfUrl}#page=${pageNumber}&view=FitH`;
     }
-    byId('page-text').textContent = 'Loading source evidence…';
+    state.evidenceText = '';
+    state.evidenceMessage = 'Loading page text…';
+    state.evidenceMatchIndex = 0;
+    byId('evidence-status').textContent = '';
+    renderEvidence();
     byId('text-status').textContent = 'Loading page';
     try {
       const page = await api(`/api/pages/${pageNumber}`);
@@ -281,17 +495,24 @@
       byId('viewer-subtitle').textContent = `Loan ${state.package.manifest.loanId} · Physical PDF page ${page.pageNumber}`;
       byId('viewer-document-type').textContent = page.documentType.toUpperCase();
       byId('viewer-version').textContent = `VERSION ${page.version}`;
-      byId('page-text').textContent = page.textMissing
-        ? 'No extracted text is available for this physical page. The page remains part of the package and can still be reviewed in the original PDF when it is attached.'
-        : page.text;
-      byId('text-status').textContent = page.textMissing ? 'Text extraction unavailable' : 'Extracted source text';
-      byId('evidence-length').textContent = page.textMissing ? 'NO TEXT LAYER' : `${page.text.length.toLocaleString()} CHARACTERS`;
+      state.evidenceText = page.textMissing ? '' : page.text;
+      state.evidenceMessage = page.textMissing
+        ? 'No text is available for this page. You can still review the page in the original PDF when it is attached.'
+        : 'No readable text was found on this page.';
+      state.evidenceMatchIndex = 0;
+      byId('evidence-find').value = '';
+      byId('evidence-status').textContent = '';
+      renderEvidence();
+      byId('evidence-dialog-subtitle').textContent = `${page.documentTitle} · PDF page ${page.pageNumber}`;
+      byId('text-status').textContent = page.textMissing ? 'Text unavailable on this page' : 'Page text available';
       byId('page-prev').disabled = pageNumber <= 1;
       byId('page-next').disabled = pageNumber >= state.package.manifest.pageCount;
     } catch (error) {
       if (requestId !== state.pageRequestId) return;
       byId('text-status').textContent = error.message;
-      byId('page-text').textContent = 'Unable to load this page. Check the API response and try again.';
+      state.evidenceText = '';
+      state.evidenceMessage = 'This page text could not be loaded. Please try selecting the page again.';
+      renderEvidence();
     }
   }
 
@@ -336,6 +557,32 @@
   });
   byId('page-prev').addEventListener('click', () => showPage(state.selectedPage - 1));
   byId('page-next').addEventListener('click', () => showPage(state.selectedPage + 1));
+  byId('evidence-find').addEventListener('input', () => {
+    state.evidenceMatchIndex = 0;
+    renderEvidence();
+  });
+  byId('evidence-find').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      moveEvidenceMatch(event.shiftKey ? -1 : 1);
+    }
+  });
+  byId('evidence-find-prev').addEventListener('click', () => moveEvidenceMatch(-1));
+  byId('evidence-find-next').addEventListener('click', () => moveEvidenceMatch(1));
+  byId('evidence-mode').addEventListener('click', () => {
+    state.evidenceModeOriginal = !state.evidenceModeOriginal;
+    renderEvidence();
+  });
+  byId('evidence-copy').addEventListener('click', copyEvidenceText);
+  byId('evidence-expand').addEventListener('click', () => {
+    byId('evidence-dialog').showModal();
+    renderEvidence();
+    byId('expanded-page-text').focus();
+  });
+  byId('evidence-dialog-close').addEventListener('click', () => byId('evidence-dialog').close());
+  byId('evidence-dialog').addEventListener('click', (event) => {
+    if (event.target === byId('evidence-dialog')) byId('evidence-dialog').close();
+  });
   byId('document-filter').addEventListener('input', (event) => {
     const query = event.target.value.trim().toLowerCase();
     byId('document-tree').querySelectorAll('.tree-group').forEach((group) => {
