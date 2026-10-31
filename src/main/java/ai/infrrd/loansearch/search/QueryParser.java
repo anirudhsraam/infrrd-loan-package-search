@@ -50,23 +50,30 @@ final class QueryParser {
 
     private QueryNode parseUnary() {
         if (match(Type.NOT)) return negate(parseUnary());
-        if (match(Type.LEFT_PAREN)) {
-            QueryNode inner = parseOr();
-            if (!match(Type.RIGHT_PAREN)) throw new QuerySyntaxException("Missing closing parenthesis.");
-            return inner;
-        }
+        if (match(Type.LEFT_PAREN)) return parseParenthesized();
         if (cursor >= tokens.size()) throw new QuerySyntaxException("Query ends with an operator.");
 
         Lexeme token = tokens.get(cursor++);
-        if (token.type() == Type.PHRASE) {
-            List<String> terms = TextTokenizer.tokenize(token.value());
-            if (terms.isEmpty()) throw new QuerySyntaxException("Quoted phrases must contain searchable words.");
-            return terms.size() == 1 ? new QueryNode.Term(terms.getFirst()) : new QueryNode.Phrase(terms);
-        }
-        if (token.type() != Type.WORD) throw new QuerySyntaxException("Unexpected token: " + token.value());
+        if (token.type() == Type.PHRASE) return parsePhrase(token.value());
+        if (token.type() == Type.WORD) return parseWord(token.value());
+        throw new QuerySyntaxException("Unexpected token: " + token.value());
+    }
 
-        String value = token.value().toLowerCase(Locale.ROOT);
-        if (value.contains("*") && !value.endsWith("*")) {
+    private QueryNode parseParenthesized() {
+        QueryNode inner = parseOr();
+        if (!match(Type.RIGHT_PAREN)) throw new QuerySyntaxException("Missing closing parenthesis.");
+        return inner;
+    }
+
+    private QueryNode parsePhrase(String value) {
+        List<String> terms = TextTokenizer.tokenize(value);
+        if (terms.isEmpty()) throw new QuerySyntaxException("Quoted phrases must contain searchable words.");
+        return terms.size() == 1 ? new QueryNode.Term(terms.getFirst()) : new QueryNode.Phrase(terms);
+    }
+
+    private QueryNode parseWord(String word) {
+        String value = word.toLowerCase(Locale.ROOT);
+        if (value.indexOf('*') != value.lastIndexOf('*') || (value.contains("*") && !value.endsWith("*"))) {
             throw new QuerySyntaxException("Only suffix wildcards are supported, for example sign*.");
         }
         if (value.endsWith("*")) {
@@ -103,39 +110,71 @@ final class QueryParser {
     }
 
     private static List<Lexeme> lex(String input) {
-        List<Lexeme> result = new ArrayList<>();
-        for (int i = 0; i < input.length();) {
-            char current = input.charAt(i);
-            if (Character.isWhitespace(current)) { i++; continue; }
-            if (current == '(') { result.add(new Lexeme(Type.LEFT_PAREN, "(")); i++; continue; }
-            if (current == ')') { result.add(new Lexeme(Type.RIGHT_PAREN, ")")); i++; continue; }
-            if (current == '"') {
-                StringBuilder phrase = new StringBuilder();
-                i++;
-                boolean closed = false;
-                while (i < input.length()) {
-                    char next = input.charAt(i++);
-                    if (next == '"') { closed = true; break; }
-                    if (next == '\\' && i < input.length()) next = input.charAt(i++);
-                    phrase.append(next);
-                }
-                if (!closed) throw new QuerySyntaxException("Unclosed quoted phrase.");
-                result.add(new Lexeme(Type.PHRASE, phrase.toString()));
-                continue;
+        return new Lexer(input).lex();
+    }
+
+    private static final class Lexer {
+        private final String input;
+        private final List<Lexeme> tokens = new ArrayList<>();
+        private int position;
+
+        private Lexer(String input) {
+            this.input = input;
+        }
+
+        private List<Lexeme> lex() {
+            while (position < input.length()) {
+                skipWhitespace();
+                if (position < input.length()) tokens.add(readLexeme());
             }
-            int start = i;
-            while (i < input.length() && !Character.isWhitespace(input.charAt(i))
-                    && input.charAt(i) != '(' && input.charAt(i) != ')' && input.charAt(i) != '"') i++;
-            String word = input.substring(start, i);
+            return List.copyOf(tokens);
+        }
+
+        private void skipWhitespace() {
+            while (position < input.length() && Character.isWhitespace(input.charAt(position))) position++;
+        }
+
+        private Lexeme readLexeme() {
+            char current = input.charAt(position);
+            if (current == '(') return punctuation(Type.LEFT_PAREN, "(");
+            if (current == ')') return punctuation(Type.RIGHT_PAREN, ")");
+            if (current == '"') return readPhrase();
+            return readWord();
+        }
+
+        private Lexeme punctuation(Type type, String value) {
+            position++;
+            return new Lexeme(type, value);
+        }
+
+        private Lexeme readPhrase() {
+            StringBuilder phrase = new StringBuilder();
+            position++;
+            while (position < input.length()) {
+                char next = input.charAt(position++);
+                if (next == '"') return new Lexeme(Type.PHRASE, phrase.toString());
+                if (next == '\\' && position < input.length()) next = input.charAt(position++);
+                phrase.append(next);
+            }
+            throw new QuerySyntaxException("Unclosed quoted phrase.");
+        }
+
+        private Lexeme readWord() {
+            int start = position;
+            while (position < input.length() && !isDelimiter(input.charAt(position))) position++;
+            String word = input.substring(start, position);
             Type type = switch (word.toUpperCase(Locale.ROOT)) {
                 case "AND" -> Type.AND;
                 case "OR" -> Type.OR;
                 case "NOT" -> Type.NOT;
                 default -> Type.WORD;
             };
-            result.add(new Lexeme(type, word));
+            return new Lexeme(type, word);
         }
-        return List.copyOf(result);
+
+        private static boolean isDelimiter(char value) {
+            return Character.isWhitespace(value) || value == '(' || value == ')' || value == '"';
+        }
     }
 
     private enum Type { WORD, PHRASE, AND, OR, NOT, LEFT_PAREN, RIGHT_PAREN }

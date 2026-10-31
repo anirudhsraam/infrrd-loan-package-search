@@ -43,6 +43,24 @@ class PackageCatalogServiceTest {
         assertTrue(snapshot.searchEngine().page(1).orElseThrow().text().isEmpty());
     }
 
+    @Test void unreadableLayoutDoesNotPublishAnIncompleteSnapshot() throws Exception {
+        prepareBasicFiles("data/layout.txt", "unused");
+        Files.write(tempDir.resolve("data/layout.txt"), new byte[]{(byte) 0xC3, 0x28});
+        Files.writeString(tempDir.resolve("package.json"), manifestJson("data/layout.txt"), StandardCharsets.UTF_8);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> catalog().snapshot());
+        assertTrue(exception.getMessage().contains("Unable to read text layout"));
+    }
+
+    @Test void layoutDirectoryIsNotTreatedAsMissingText() throws Exception {
+        Files.createDirectories(tempDir.resolve("data/layout.txt"));
+        Files.createDirectories(tempDir.resolve("data/pdf"));
+        Files.writeString(tempDir.resolve("package.json"), manifestJson("data/layout.txt"), StandardCharsets.UTF_8);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> catalog().snapshot());
+        assertTrue(exception.getMessage().contains("not a regular file"));
+    }
+
     @Test void invalidManifestPageCountIsRejected() throws Exception {
         prepareBasicFiles("data/layout.txt", "alpha page\fbravo page");
         Path manifest = tempDir.resolve("package.json");

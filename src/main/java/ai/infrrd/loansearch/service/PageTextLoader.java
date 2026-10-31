@@ -17,9 +17,12 @@ final class PageTextLoader {
     private static final long MAX_LAYOUT_BYTES = 64L * 1024 * 1024;
 
     List<String> readPages(Path layoutPath, int expectedPages) {
-        if (!Files.isRegularFile(layoutPath)) {
+        if (Files.notExists(layoutPath)) {
             log.warn("Text layout is missing ({}); continuing with empty page text.", layoutPath);
             return emptyPages(expectedPages);
+        }
+        if (!Files.isRegularFile(layoutPath)) {
+            throw new IllegalStateException("Text layout is not a regular file: " + layoutPath);
         }
         try {
             if (Files.size(layoutPath) > MAX_LAYOUT_BYTES) {
@@ -33,13 +36,13 @@ final class PageTextLoader {
             if (sections.length < expectedPages) {
                 log.warn("Text file contains {} sections for {} PDF pages; omitted pages remain available without searchable text.",
                         sections.length, expectedPages);
-            } else if (sections.length > expectedPages + 1) {
+            } else if (sections.length > expectedPages
+                    && (sections.length > expectedPages + 1 || !sections[expectedPages].isBlank())) {
                 log.warn("Text file has extra sections ({}); ignoring content after physical page {}.", sections.length, expectedPages);
             }
             return pages;
         } catch (IOException exception) {
-            log.warn("Unable to read text layout ({}); continuing with empty page text.", exception.getMessage());
-            return emptyPages(expectedPages);
+            throw new IllegalStateException("Unable to read text layout: " + layoutPath, exception);
         }
     }
 

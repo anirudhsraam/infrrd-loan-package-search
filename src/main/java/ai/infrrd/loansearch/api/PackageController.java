@@ -35,10 +35,11 @@ public class PackageController {
     @GetMapping("/pages/{pageNumber}")
     public PageDetails page(@PathVariable int pageNumber) {
         PackageSnapshot snapshot = catalog.snapshot();
-        PageRecord record = snapshot.searchEngine().page(pageNumber)
+        PageRecord pageRecord = snapshot.searchEngine().page(pageNumber)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Page not found"));
-        return new PageDetails(record.pageNumber(), record.documentId(), record.documentTitle(),
-                record.documentType(), record.version(), record.text(), record.text().isBlank(), snapshot.pdfUrl());
+        return new PageDetails(pageRecord.pageNumber(), pageRecord.documentId(), pageRecord.documentTitle(),
+                pageRecord.documentType(), pageRecord.version(), pageRecord.text(), pageRecord.text().isBlank(),
+                snapshot.pdfUrl());
     }
 
     @GetMapping("/health")

@@ -11,9 +11,12 @@ public final class SearchEngine {
     private static final int MAX_PAGES = 20_000;
     private static final int MAX_TOTAL_TOKENS = 2_000_000;
     private static final int MAX_UNIQUE_TERMS = 100_000;
-    private static final int MAX_PREFIX_EXPANSIONS = 256, MAX_CACHED_QUERIES = 64, MAX_CACHED_HITS = 5_000;
+    private static final int MAX_PREFIX_EXPANSIONS = 256;
+    private static final int MAX_CACHED_QUERIES = 64;
+    private static final int MAX_CACHED_HITS = 5_000;
     private static final int MAX_SNIPPET_CHARS = 220;
-    private static final double K1 = 1.2, B = 0.75;
+    private static final double K1 = 1.2;
+    private static final double B = 0.75;
 
     private final List<PageRecord> pages;
     private final Map<Integer, PageRecord> pagesByNumber;

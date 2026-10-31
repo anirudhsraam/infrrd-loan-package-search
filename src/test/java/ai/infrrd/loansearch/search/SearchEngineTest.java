@@ -82,6 +82,7 @@ class SearchEngineTest {
         assertThrows(QuerySyntaxException.class, () -> engine.search("cash AND", 0, 20));
         assertThrows(QuerySyntaxException.class, () -> engine.search("s*", 0, 20));
         assertThrows(QuerySyntaxException.class, () -> engine.search("ca*h", 0, 20));
+        assertThrows(QuerySyntaxException.class, () -> engine.search("cash**", 0, 20));
     }
 
     @Test void queryAndPaginationLimitsAreEnforced() {
