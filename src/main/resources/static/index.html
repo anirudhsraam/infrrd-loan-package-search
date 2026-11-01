@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#111d33">
   <meta name="description" content="Infrrd mortgage document review workspace — search a loan package and navigate directly to source evidence.">
   <title>Infrrd · Mortgage Review Workspace</title>
-  <link rel="stylesheet" href="/styles.css?v=ui-refresh-4">
+  <link rel="stylesheet" href="/styles.css?v=table-context-5">
 </head>
 <body>
 <header class="topbar">
@@ -148,7 +148,7 @@
           <div><span class="eyebrow">SOURCE PAGE TEXT</span><h3 id="evidence-title">Page text, line by line</h3></div>
           <span id="evidence-length" class="evidence-length">—</span>
         </div>
-        <p id="evidence-intro" class="evidence-intro">Text found on this document page. Aligned columns are separated with a dot to make the extracted content easier to scan.</p>
+        <p id="evidence-intro" class="evidence-intro">Aligned fields are grouped for readability. Tables are used only for clearly identified account activity and payroll rows.</p>
         <div class="evidence-tools">
           <label class="sr-only" for="evidence-find">Find in page text</label>
           <input id="evidence-find" type="search" maxlength="120" placeholder="Find in this page…" autocomplete="off" disabled>
@@ -173,6 +173,6 @@
   </div>
   <div id="expanded-page-text" class="page-text expanded-page-text" tabindex="0" role="region" aria-label="Expanded readable source page text"></div>
 </dialog>
-<script src="/app.js?v=ui-refresh-4" defer></script>
+<script src="/app.js?v=table-context-5" defer></script>
 </body>
 </html>

@@ -39,6 +39,9 @@
   }
 
   function parseEvidenceRows(text) {
+    const normalizedContext = String(text ?? '').replace(/\s+/g, ' ');
+    const moneyPattern = /-?\$?(?:\d{1,3}(?:,\s?\d{3})+|\d+)\.\d{2}/g;
+    const amountsIn = (line) => [...line.matchAll(moneyPattern)];
     const splitColumns = (line) => {
       const cells = [];
       const starts = [];
@@ -69,45 +72,72 @@
 
     while (index < lines.length) {
       const header = lines[index];
-      const headerLabels = header.cells;
-      const hasLikelyColumnLabels = headerLabels.length >= 2
-        && !/[•●▪]/.test(header.raw)
-        && headerLabels.every((label) => label.length <= 60)
-        && headerLabels.some((label) => /\b(date|description|withdrawals?|deposits?|balance|account|institution|company|name|type|number|amount|payment|income|asset|credit|debit|value|quantity|rate|term|property|address|status|borrower|employer|source)\b/i.test(label))
-        && !headerLabels.some((label) => /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\$\s?\d/i.test(label));
+      const headerLabels = header.cells.map((label) => label.toLowerCase().replace(/[^a-z]+/g, ' ').trim());
+      const accountActivity = /\bstatement of account\b/i.test(normalizedContext)
+        && headerLabels.join('|') === 'date|description|withdrawals|deposits|balance';
+      const payrollTable = /\b(?:earnings statement|statement of earnings|pay stub)\b/i.test(normalizedContext)
+        && (headerLabels.join('|') === 'description|hours|rate|current|ytd'
+          || headerLabels.join('|') === 'description|current|ytd');
+      const tableKind = accountActivity ? 'account-activity' : payrollTable ? 'payroll' : '';
+      const isDataRow = (line) => {
+        if (line.cells.length < 2 || line.cells.length > headerLabels.length) return false;
+        if (tableKind === 'account-activity') {
+          return /^\s*\d{1,2}\/\d{1,2}\/\d{4}\b/.test(line.raw)
+            && amountsIn(line.raw).length >= 2;
+        }
+        return Boolean(tableKind)
+          && amountsIn(line.raw).length >= 2;
+      };
       const nextLines = lines.slice(index + 1, index + 4);
-      const hasDataRows = nextLines.length >= 2 && nextLines.every((line) =>
-        line.cells.length >= 2
-        && line.cells.length <= headerLabels.length
-        && (/\d|\$|[A-Z]{2,}/.test(line.raw) || line.cells.some((cell) => cell.length > 12)));
-
-      if (hasLikelyColumnLabels && hasDataRows) {
+      if (tableKind && nextLines.filter(isDataRow).length >= 2) {
         const starts = header.starts.slice(0, headerLabels.length);
         const rows = [];
         let dataIndex = index + 1;
         while (dataIndex < lines.length) {
           const current = lines[dataIndex];
-          const isTotal = /^(total|subtotal)\b/i.test(current.raw.trim());
-          if (isTotal || current.cells.length < 2 || current.cells.length > headerLabels.length) break;
-          const values = starts.map((start, columnIndex) => {
-            const end = starts[columnIndex + 1] ?? current.raw.length;
-            return current.raw.slice(start, end).replace(/[ \t]+/g, ' ').trim();
-          });
+          if (!isDataRow(current)) break;
+          const values = Array(headerLabels.length).fill('');
+          if (tableKind === 'account-activity') {
+            const date = current.raw.match(/^\s*(\d{1,2}\/\d{1,2}\/\d{4})\b/);
+            const amounts = amountsIn(current.raw);
+            values[0] = date?.[1] ?? '';
+            values[1] = current.raw.slice((date?.[0].length ?? 0), amounts[0]?.index ?? current.raw.length).trim().replace(/[ \t]+/g, ' ');
+            assignAmounts(values, amounts, starts, 2);
+          } else {
+            const amounts = amountsIn(current.raw);
+            values[0] = current.raw.slice(0, amounts[0]?.index ?? current.raw.length).trim().replace(/[ \t]+/g, ' ');
+            assignAmounts(values, amounts, starts, 1);
+          }
           if (values.filter(Boolean).length < 2) break;
           rows.push(values);
           dataIndex++;
         }
         if (rows.length >= 2) {
-          blocks.push({ type: 'table', headers: headerLabels, rows });
+          blocks.push({ type: 'table', kind: tableKind, headers: header.cells, rows });
           index = dataIndex;
           continue;
         }
       }
 
-      blocks.push({ type: 'text', text: header.raw.trim() });
+      blocks.push({ type: 'text', text: header.cells.join(' · ') });
       index++;
     }
     return blocks;
+  }
+
+  function assignAmounts(values, amounts, columnStarts, firstNumericColumn) {
+    for (const amount of amounts) {
+      let closestColumn = firstNumericColumn;
+      let closestDistance = Infinity;
+      for (let column = firstNumericColumn; column < columnStarts.length; column++) {
+        const distance = Math.abs(amount.index - columnStarts[column]);
+        if (distance < closestDistance) {
+          closestColumn = column;
+          closestDistance = distance;
+        }
+      }
+      values[closestColumn] = amount[0].trim().replace(/,\s+/g, ',');
+    }
   }
 
   function evidenceSearchText() {
@@ -156,12 +186,16 @@
             return `<p class="evidence-page-line">${renderCell(block.text)}</p>`;
           }
           return `
-            <div class="evidence-table-wrap" style="--column-count: ${block.headers.length}">
+            <div class="evidence-table-wrap" data-table-kind="${block.kind}" style="--column-count: ${block.headers.length}">
               <table class="evidence-table">
-                <caption class="sr-only">Extracted data table from the selected source page.</caption>
-                <thead><tr>${block.headers.map((header) => `<th scope="col">${renderCell(header)}</th>`).join('')}</tr></thead>
+                <caption class="sr-only">${block.kind === 'account-activity' ? 'Bank account activity transactions' : 'Payroll earnings and deductions'}</caption>
+                <thead><tr>${block.headers.map((header) => `<th scope="col" class="${isNumericColumn(header) ? 'is-numeric' : ''}">${renderCell(header)}</th>`).join('')}</tr></thead>
                 <tbody>${block.rows.map((row) => `
-                  <tr>${block.headers.map((_, columnIndex) => `<td>${renderCell(row[columnIndex] ?? '')}</td>`).join('')}</tr>
+                  <tr>${block.headers.map((header, columnIndex) => {
+                    const value = row[columnIndex] ?? '';
+                    const classes = [isNumericColumn(header) ? 'is-numeric' : '', value ? '' : 'empty-cell'].filter(Boolean).join(' ');
+                    return `<td class="${classes}">${renderCell(value)}</td>`;
+                  }).join('')}</tr>
                 `).join('')}</tbody>
               </table>
             </div>`;
@@ -169,6 +203,10 @@
     }
     container.classList.toggle('is-original', state.evidenceModeOriginal);
     return matchIndex;
+  }
+
+  function isNumericColumn(header) {
+    return /\b(?:hours?|rate|current|ytd|withdrawals?|deposits?|balance)\b/i.test(header);
   }
 
   function renderEvidence() {
@@ -189,7 +227,7 @@
     byId('evidence-mode').setAttribute('aria-pressed', String(state.evidenceModeOriginal));
     byId('evidence-intro').textContent = state.evidenceModeOriginal
       ? 'Original extraction with spacing preserved. This can be difficult to read; select “Show table view” to see recognized tables with their page headings.'
-      : 'Recognized tables use the headings found on the page. Other content is shown as page text; no column headings are guessed.';
+      : 'Aligned fields are grouped for readability. Tables are used only for clearly identified account activity and payroll rows; form layouts stay in reading order.';
     byId('evidence-find-count').textContent = query
       ? `${count ? state.evidenceMatchIndex + 1 : 0} of ${count}`
       : '';

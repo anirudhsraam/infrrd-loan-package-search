@@ -224,6 +224,11 @@ code { padding: 1px 5px; border-radius: 4px; background: #eef2f6; color: #394e64
 .evidence-table th, .evidence-table td { min-width: 104px; padding: 9px 11px; border-right: 1px solid #e5ebf1; border-bottom: 1px solid #e5ebf1; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
 .evidence-table thead th { position: sticky; z-index: 2; top: 0; background: #edf2f6; color: #344a61; font-size: 11px; font-weight: 800; letter-spacing: .035em; }
 .evidence-table tbody td { color: #30445b; font-size: 13px; line-height: 1.55; }
+.evidence-table .is-numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.evidence-table-wrap[data-table-kind="account-activity"] th:nth-child(2),
+.evidence-table-wrap[data-table-kind="account-activity"] td:nth-child(2),
+.evidence-table-wrap[data-table-kind="payroll"] th:first-child,
+.evidence-table-wrap[data-table-kind="payroll"] td:first-child { min-width: 230px; }
 .evidence-table tbody tr:nth-child(even) td { background: #f8fafc; }
 .evidence-table tbody tr:hover td { background: #fff8f5; }
 .evidence-table .empty-cell { background: #fafbfd; }
