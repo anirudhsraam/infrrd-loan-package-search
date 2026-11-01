@@ -23,11 +23,17 @@ public class SearchController {
     public SearchResponse search(
             @RequestParam("q") String query,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String documentType) {
         PackageSnapshot snapshot = catalog.snapshot();
-        SearchEngine.SearchPage result = snapshot.searchEngine().search(query, page, size);
+        String filter = documentType == null || documentType.isBlank() ? null : documentType.trim();
+        if (filter != null && snapshot.manifest().documents().stream()
+                .noneMatch(document -> document.type().equalsIgnoreCase(filter))) {
+            throw new IllegalArgumentException("Document type filter is not present in this package.");
+        }
+        SearchEngine.SearchPage result = snapshot.searchEngine().search(query, page, size, filter);
         return new SearchResponse(query, result.hits(), result.totalHits(), result.page(), result.size(),
-                result.timings(), snapshot.manifest().pageCount(), snapshot.missingTextPages(),
+                filter, result.timings(), snapshot.manifest().pageCount(), snapshot.missingTextPages(),
                 snapshot.manifestReadMs(), snapshot.layoutReadMs(), snapshot.pageMappingMs(),
                 snapshot.indexBuildMs(), snapshot.totalBuildMs());
     }
@@ -38,6 +44,7 @@ public class SearchController {
             int totalHits,
             int page,
             int size,
+            String documentType,
             SearchEngine.SearchTimings timings,
             int packagePageCount,
             int missingTextPages,

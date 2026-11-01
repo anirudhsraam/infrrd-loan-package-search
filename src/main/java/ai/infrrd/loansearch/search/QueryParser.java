@@ -88,6 +88,14 @@ final class QueryParser {
         if (terms.isEmpty()) throw new QuerySyntaxException("The query contains no searchable words.");
         QueryNode result = new QueryNode.Term(terms.getFirst());
         for (int i = 1; i < terms.size(); i++) result = new QueryNode.And(result, new QueryNode.Term(terms.get(i)));
+        if (terms.size() == 1) {
+            for (List<String> alternative : SearchSynonyms.alternatives(terms.getFirst())) {
+                QueryNode synonym = alternative.size() == 1
+                        ? new QueryNode.Term(alternative.getFirst())
+                        : new QueryNode.Phrase(alternative);
+                result = new QueryNode.Or(result, synonym);
+            }
+        }
         return result;
     }
 

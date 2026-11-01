@@ -7,7 +7,7 @@ import ai.infrrd.loansearch.search.SearchEngine;
 import java.nio.file.Path;
 import java.util.List;
 
-/** Immutable, atomically published view of one validated package-manifest revision. */
+/** Immutable, atomically published view of one validated package-source revision. */
 public record PackageSnapshot(
         PackageManifest manifest,
         List<PageRecord> pages,
@@ -20,7 +20,8 @@ public record PackageSnapshot(
         double pageMappingMs,
         double indexBuildMs,
         double totalBuildMs,
-        String manifestHash) {
+        String manifestHash,
+        String sourceFingerprint) {
 
     public PackageSnapshot {
         pages = List.copyOf(pages);

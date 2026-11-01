@@ -125,6 +125,39 @@ class PackageCatalogServiceTest {
         assertSame(first, catalog.snapshot());
     }
 
+    @Test void layoutEditsRebuildTheIndexWithoutManifestChanges() throws Exception {
+        prepareBasicFiles("data/layout.txt", "alpha page\fneutral page");
+        Files.writeString(tempDir.resolve("package.json"), manifestJson("data/layout.txt"), StandardCharsets.UTF_8);
+        PackageCatalogService catalog = catalog();
+        PackageSnapshot first = catalog.snapshot();
+        assertEquals(1, first.searchEngine().search("alpha", 0, 10).totalHits());
+
+        Files.writeString(tempDir.resolve("data/layout.txt"), "bravo page\fneutral page", StandardCharsets.UTF_8);
+        PackageSnapshot refreshed = catalog.snapshot();
+
+        assertNotSame(first, refreshed);
+        assertEquals(first.manifestHash(), refreshed.manifestHash());
+        assertNotEquals(first.sourceFingerprint(), refreshed.sourceFingerprint());
+        assertEquals(0, refreshed.searchEngine().search("alpha", 0, 10).totalHits());
+        assertEquals(1, refreshed.searchEngine().search("bravo", 0, 10).totalHits());
+    }
+
+    @Test void pdfMetadataChangesInvalidateThePackageSnapshot() throws Exception {
+        prepareBasicFiles("data/layout.txt", "alpha page\fbravo page");
+        Files.writeString(tempDir.resolve("package.json"), manifestJson("data/layout.txt"), StandardCharsets.UTF_8);
+        Path pdf = Files.writeString(tempDir.resolve("data/pdf/loan-package.pdf"), "pdf-one", StandardCharsets.UTF_8);
+        PackageCatalogService catalog = catalog();
+        PackageSnapshot first = catalog.snapshot();
+
+        Files.writeString(pdf, "pdf-two", StandardCharsets.UTF_8);
+        Files.setLastModifiedTime(pdf, java.nio.file.attribute.FileTime.fromMillis(
+                Files.getLastModifiedTime(pdf).toMillis() + 2_000));
+        PackageSnapshot refreshed = catalog.snapshot();
+
+        assertNotSame(first, refreshed);
+        assertNotEquals(first.sourceFingerprint(), refreshed.sourceFingerprint());
+    }
+
     @Test void buildStagesAreMeasuredSeparately() throws Exception {
         prepareBasicFiles("data/layout.txt", "alpha page\fbravo page");
         Files.writeString(tempDir.resolve("package.json"), manifestJson("data/layout.txt"), StandardCharsets.UTF_8);

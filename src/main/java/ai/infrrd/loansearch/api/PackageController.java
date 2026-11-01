@@ -2,6 +2,7 @@ package ai.infrrd.loansearch.api;
 
 import ai.infrrd.loansearch.domain.PageRecord;
 import ai.infrrd.loansearch.domain.PackageManifest;
+import ai.infrrd.loansearch.domain.PageTextMetadata;
 import ai.infrrd.loansearch.service.PackageCatalogService;
 import ai.infrrd.loansearch.service.PackageSnapshot;
 import org.springframework.http.HttpStatus;
@@ -26,10 +27,15 @@ public class PackageController {
     @GetMapping("/package")
     public PackageDetails packageDetails() {
         PackageSnapshot snapshot = catalog.snapshot();
+        int lowQualityTextPages = (int) snapshot.pages().stream()
+                .filter(page -> page.textMetadata().quality() == PageTextMetadata.Quality.LOW).count();
+        int ocrPages = (int) snapshot.pages().stream()
+                .filter(page -> page.textMetadata().source() == PageTextMetadata.Source.OCR).count();
         return new PackageDetails(snapshot.manifest(), Files.isRegularFile(snapshot.pdfPath()), snapshot.pdfUrl(),
                 snapshot.missingTextPages(), snapshot.searchEngine().indexedTokenCount(),
                 snapshot.searchEngine().indexedTermCount(), snapshot.manifestReadMs(), snapshot.layoutReadMs(),
-                snapshot.pageMappingMs(), snapshot.indexBuildMs(), snapshot.totalBuildMs());
+                snapshot.pageMappingMs(), snapshot.indexBuildMs(), snapshot.totalBuildMs(),
+                lowQualityTextPages, ocrPages);
     }
 
     @GetMapping("/pages/{pageNumber}")
@@ -39,7 +45,7 @@ public class PackageController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Page not found"));
         return new PageDetails(pageRecord.pageNumber(), pageRecord.documentId(), pageRecord.documentTitle(),
                 pageRecord.documentType(), pageRecord.version(), pageRecord.text(), pageRecord.text().isBlank(),
-                snapshot.pdfUrl());
+                pageRecord.textMetadata(), snapshot.pdfUrl());
     }
 
     @GetMapping("/health")
@@ -50,6 +56,8 @@ public class PackageController {
                 "indexedTokens", snapshot.searchEngine().indexedTokenCount(),
                 "indexedTerms", snapshot.searchEngine().indexedTermCount(),
                 "missingTextPages", snapshot.missingTextPages(),
+                "lowQualityTextPages", snapshot.pages().stream()
+                        .filter(page -> page.textMetadata().quality() == PageTextMetadata.Quality.LOW).count(),
                 "cachedQueries", snapshot.searchEngine().cachedQueryCount());
     }
 
@@ -64,7 +72,9 @@ public class PackageController {
             double layoutReadMs,
             double pageMappingMs,
             double indexBuildMs,
-            double totalBuildMs) { }
+            double totalBuildMs,
+            int lowQualityTextPages,
+            int ocrPages) { }
 
     public record PageDetails(
             int pageNumber,
@@ -74,5 +84,6 @@ public class PackageController {
             String version,
             String text,
             boolean textMissing,
+            PageTextMetadata textMetadata,
             String pdfUrl) { }
 }

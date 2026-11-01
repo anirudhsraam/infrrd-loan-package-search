@@ -1,6 +1,7 @@
 package ai.infrrd.loansearch.search;
 
 import ai.infrrd.loansearch.domain.PageRecord;
+import ai.infrrd.loansearch.domain.PageTextMetadata;
 
 import java.util.*;
 
@@ -136,15 +137,25 @@ public final class SearchEngine {
     }
 
     public SearchPage search(String rawQuery, int page, int size) {
+        return search(rawQuery, page, size, null);
+    }
+
+    public SearchPage search(String rawQuery, int page, int size, String documentType) {
         if (rawQuery == null || rawQuery.isBlank()) throw new QuerySyntaxException("Enter a search query.");
         if (rawQuery.length() > 256) throw new QuerySyntaxException("Queries are limited to 256 characters.");
         if (page < 0) throw new QuerySyntaxException("Page must be zero or greater.");
         if (size < 1 || size > 100) throw new QuerySyntaxException("Page size must be between 1 and 100.");
+        String normalizedDocumentType = documentType == null || documentType.isBlank()
+                ? null : documentType.trim().toLowerCase(Locale.ROOT);
+        if (normalizedDocumentType != null && normalizedDocumentType.length() > 120) {
+            throw new QuerySyntaxException("Document type filters are limited to 120 characters.");
+        }
         long offsetLong = (long) page * size;
         if (offsetLong >= MAX_CACHED_HITS && page > 0)
             throw new QuerySyntaxException("Deep pagination is limited to the first " + MAX_CACHED_HITS + " results.");
 
-        String cacheKey = rawQuery.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+        String cacheKey = rawQuery.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ")
+                + "\u0000type:" + (normalizedDocumentType == null ? "" : normalizedDocumentType);
         long cacheStart = System.nanoTime();
         CachedQuery cached;
         synchronized (queryCache) {
@@ -160,6 +171,15 @@ public final class SearchEngine {
             parseNs = System.nanoTime() - start;
             start = System.nanoTime();
             Evaluation evaluation = evaluate(root);
+            if (normalizedDocumentType != null) {
+                BitSet typeMatches = new BitSet(pages.size());
+                for (int docId = 0; docId < pages.size(); docId++) {
+                    if (pages.get(docId).documentType().toLowerCase(Locale.ROOT).equals(normalizedDocumentType)) {
+                        typeMatches.set(docId);
+                    }
+                }
+                evaluation.matches().and(typeMatches);
+            }
             evaluationNs = System.nanoTime() - start;
             start = System.nanoTime();
             List<ScoredDocument> ranked = new ArrayList<>(evaluation.matches.cardinality());
@@ -191,7 +211,7 @@ public final class SearchEngine {
             PageRecord record = pages.get(cached.docIds()[i]);
             hits.add(new SearchHit(record.pageNumber(), record.documentId(), record.documentTitle(),
                     record.documentType(), record.version(), round(cached.scores()[i]),
-                    snippet(record.text(), cached.terms()), record.text().isBlank()));
+                    snippet(record.text(), cached.terms()), record.text().isBlank(), record.textMetadata()));
         }
         long snippetNs = System.nanoTime() - snippetStart;
         long totalNs = cacheLookupNs + parseNs + evaluationNs + rankingNs + snippetNs;
@@ -357,7 +377,8 @@ public final class SearchEngine {
     }
 
     public record SearchHit(int pageNumber, String documentId, String documentTitle, String documentType,
-                            String version, double score, String snippet, boolean textMissing) {
+                            String version, double score, String snippet, boolean textMissing,
+                            PageTextMetadata textMetadata) {
     }
 
     public record SearchTimings(double cacheLookupMs, double parseMs, double evaluationMs, double rankingMs,

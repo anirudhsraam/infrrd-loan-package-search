@@ -30,12 +30,17 @@ query AST, and positional inverted index. `SearchEngine` is responsible for Bool
 scoring, snippets, pagination, and bounded result caches. The UI consumes the API and keeps document navigation separate
 from search results.
 
-`package.json` is the source of truth for document type, version, and physical page ranges. Every request hashes the
-small manifest. A changed hash triggers validation and a complete rebuild; the new immutable snapshot is published with
-one volatile write, so readers never observe a partially refreshed index. The page-delimited `data/layout.txt` maps
-section N to physical PDF page N. AND, OR, NOT, parentheses, implicit AND, quoted phrases, and suffix wildcards such as
-`sign*` are supported. Ranking uses BM25-style term weighting and positional phrase checks. Results include source
-document metadata, physical page, snippet, and relevance score.
+`package.json` is the source of truth for document type, version, and physical page ranges. Requests fingerprint the
+manifest, layout text, optional extraction-provenance report, and PDF file metadata. A source change triggers validation
+and a complete rebuild; the new immutable snapshot is published with one volatile write, so readers never observe a
+partially refreshed index. Layout and report contents are hashed; the large PDF is checked using size, modification
+time, and file identity on requests to avoid repeatedly hashing 144 MB. Generated extraction reports also carry a PDF
+SHA-256, which is verified when that report is loaded. The page-delimited layout maps section N to physical PDF page N.
+AND, OR, NOT, parentheses, implicit AND, quoted phrases, and suffix wildcards such as `sign*` are supported. Bare
+`paycheck`/`paystub`, `impound`, and `income` searches also expand to a small explicit set of mortgage-review
+alternatives. A document-type filter narrows results without changing query syntax. Ranking uses BM25-style term
+weighting and positional phrase checks; representative reviewer queries are evaluated with MRR, Recall@3, and nDCG@3
+tests. Results include source document metadata, physical page, snippet, relevance score, and page-text provenance.
 
 The source-text viewer preserves form and disclosure content in reading order instead of guessing table structure from
 spacing alone. It renders a table only when page context and column headings identify bank-account activity or payroll
@@ -45,13 +50,13 @@ through the viewer toggle.
 
 ## Performance and memory
 
-Measured on the supplied 560-page corpus with OpenJDK 21.0.12.1 using `./scripts/verify-core.sh` (plain-JDK benchmark;
+Measured on the supplied 560-page corpus with OpenJDK 25.0.1 using `./scripts/verify-core.sh` (plain-JDK benchmark;
 one local process, not an HTTP/load test):
 
 - 560 physical pages; 280 pages have no extracted text; 161,253 indexed tokens and 6,571 unique terms.
-- Latest run: layout read + page mapping 63.547 ms; index build 182.094 ms; first search for `"cash to close"` 26.826 ms
+- Latest run: layout read + page mapping 150.671 ms; index build 340.254 ms; first search for `"cash to close"` 58.487 ms
   (19 matching pages).
-- 25 identical warm repeats: 1.658 ms median and 7.973 ms p95; 16.2× median improvement over the first measured search.
+- 25 identical warm repeats: 1.858 ms median and 4.313 ms p95; 31.5× median improvement over the first measured search.
 
 Numbers are machine/JVM dependent. The first-search timing starts after index construction; build timings are reported
 separately in the UI and benchmark. Memory is bounded by limits of 20,000 pages, 64 MiB layout text, 4 MiB manifest,
@@ -59,31 +64,59 @@ separately in the UI and benchmark. Memory is bounded by limits of 20,000 pages,
 5,000 page IDs per query), and 100 results per API page. Requests over those bounds are rejected or safely degraded
 rather than allowed to grow caches without limit.
 
+## PDF extraction, OCR, and text quality
+
+The supplied PDF can be re-extracted offline with PDFBox. This writes `data/generated/layout.txt` and a matching
+`layout.txt.provenance.json` report; it does not overwrite the supplied `data/layout.txt` or start the web server:
+
+```powershell
+mvn spring-boot:run "-Dspring-boot.run.arguments=--app.extract-pdf=true"
+```
+
+To use the generated text, change `layoutFile` in `package.json` to `data/generated/layout.txt`. The next request
+validates the generated report and rebuilds the index. The report records the source PDF SHA-256, layout SHA-256,
+per-page extraction source, and per-page quality estimate. The viewer shows whether text came from the supplied layout,
+PDF extraction, or OCR, plus the quality estimate and non-whitespace character count.
+
+OCR is opt-in and requires Tesseract plus the requested language data installed locally. It only renders pages whose
+PDF text is empty or below the quality heuristic; it is not run during ordinary web requests:
+
+```powershell
+$env:APP_OCR_ENABLED = "true"
+$env:APP_OCR_EXECUTABLE = "tesseract"
+$env:APP_OCR_LANGUAGE = "eng"
+mvn spring-boot:run "-Dspring-boot.run.arguments=--app.extract-pdf=true"
+```
+
+The quality labels are a coarse triage heuristic, not OCR confidence or a guarantee of correctness. A page is marked
+usable when it has at least 40 non-whitespace characters, at least 60% letters/digits among those characters, and no
+excessive Unicode replacement characters; shorter or noisier text is marked low quality. OCR is not automatically
+available unless Tesseract is configured and installed.
+
 ## Package data and limitations
 
 The supplied text corpus covers 560 physical pages and the reconstructed manifest defines 104 document entries with
-contiguous, non-overlapping page ranges. The original 144 MB PDF is not duplicated in this lightweight archive. To
-enable embedded PDF preview, copy it to `data/pdf/loan-package.pdf`; without it, page navigation and extracted-text
-review still work. Pages without a text layer stay visible in the document tree and viewer but cannot match full-text
-queries. No OCR is attempted.
+contiguous, non-overlapping page ranges. The 144 MB source PDF is present at `data/pdf/loan-package.pdf`. Pages without
+usable extracted text stay visible in the document tree and viewer but cannot match full-text queries unless an
+operator runs the optional OCR extraction command.
 
 The brief referenced a separate assignment ZIP, but only the assignment brief, sample PDF, and layout text were
 supplied. Therefore the original repository's `package.json`, starter code, and `AGENTS.md` were unavailable; document
 metadata was reconstructed from the supplied page text and visible page headings. Edit `package.json` to change document
-metadata or page ranges. The next API request detects the change, validates it, and rebuilds the snapshot. The index is
-in-memory and is not persisted across restarts. Authentication, OCR, PDF generation, and deployment are out of scope.
-With more time, I would add a real PDF/text extraction pipeline, larger-corpus benchmarks, concurrency/load tests, and
-an external index such as Lucene/OpenSearch for multi-instance scaling.
+ranges or the active layout. The next API request detects source changes and rebuilds the snapshot. The index is
+in-memory and is not persisted across restarts. Authentication and deployment are out of scope.
 
 ## Tests and validation
 
-There are 32 JUnit tests across the search and package-catalog layers, covering Boolean precedence, phrase position,
-wildcard validation/expansion, Unicode normalization, ranking/pagination, cache bounds, missing text, package reload,
-manifest validation and size limits, path traversal, and stage timings. Run them with `mvn test`. The dependency-free
+There are 41 JUnit tests across the search, API, and package-catalog layers covering Boolean precedence, phrase position, wildcard
+validation/expansion, Unicode normalization, ranking/pagination, cache bounds, missing text, source-file refresh,
+manifest validation and size limits, path traversal, PDF extraction/provenance, and stage timings. Search quality tests
+use a small annotated mortgage-review query set and enforce top-three relevance thresholds. Run them with `mvn test`.
+The dependency-free
 search smoke checks and sample benchmark can be run with `bash scripts/verify-core.sh`; check the UI script syntax with
 `node --check src/main/resources/static/app.js`.
 
-The current implementation has been verified with `mvn test` (32 tests passing),
+The current implementation has been verified with `mvn test`,
 `node --check src/main/resources/static/app.js`, and a local Spring Boot smoke check of the UI and health endpoint. The
 table renderer was also checked across the supplied page text: it recognized bank activity and payroll tables while
 leaving loan application and underwriting form layouts as text. Maven compiles for the project's Java 21 target; the

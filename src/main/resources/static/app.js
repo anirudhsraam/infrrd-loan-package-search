@@ -226,8 +226,8 @@
     byId('evidence-mode').textContent = state.evidenceModeOriginal ? 'Show table view' : 'Show original text';
     byId('evidence-mode').setAttribute('aria-pressed', String(state.evidenceModeOriginal));
     byId('evidence-intro').textContent = state.evidenceModeOriginal
-      ? 'Original extraction with spacing preserved. This can be difficult to read; select “Show table view” to see recognized tables with their page headings.'
-      : 'Aligned fields are grouped for readability. Tables are used only for clearly identified account activity and payroll rows; form layouts stay in reading order.';
+      ? 'Original extraction with spacing preserved. This can be difficult to read; select “Show table view” to see recognized tables with their page headings. Text quality is a heuristic, not OCR confidence.'
+      : 'Aligned fields are grouped for readability. Tables are used only for clearly identified account activity and payroll rows; form layouts stay in reading order. Text quality is a heuristic, not OCR confidence.';
     byId('evidence-find-count').textContent = query
       ? `${count ? state.evidenceMatchIndex + 1 : 0} of ${count}`
       : '';
@@ -331,11 +331,20 @@
     byId('stat-documents').textContent = manifest.documents.length.toLocaleString();
     byId('stat-missing').textContent = details.missingTextPages.toLocaleString();
     byId('stat-indexed').textContent = details.indexedTerms.toLocaleString();
+    byId('stat-low-quality').textContent = details.lowQualityTextPages.toLocaleString();
     byId('page-total').textContent = `/ ${manifest.pageCount}`;
     byId('page-number').max = String(manifest.pageCount);
     byId('tab-document-count').textContent = manifest.documents.length.toLocaleString();
     byId('results-badge').textContent = `${manifest.pageCount.toLocaleString()} PAGES`;
     byId('document-summary').textContent = `${manifest.documents.length} documents across ${new Set(manifest.documents.map((doc) => doc.type)).size} categories`;
+    const typeFilter = byId('document-type-filter');
+    const selectedType = typeFilter.value;
+    typeFilter.replaceChildren(new Option('All document types', ''));
+    [...new Set(manifest.documents.map((doc) => doc.type))]
+      .sort((left, right) => left.localeCompare(right))
+      .forEach((type) => typeFilter.add(new Option(type, type)));
+    typeFilter.value = [...typeFilter.options].some((option) => option.value === selectedType) ? selectedType : '';
+    typeFilter.disabled = false;
     renderDocumentTree(manifest.documents);
 
     const pdfAvailable = details.pdfAvailable;
@@ -423,7 +432,7 @@
             <span class="result-card-title">${escapeHtml(hit.documentTitle)}</span>
             <span class="page-pill">PAGE ${hit.pageNumber}</span>
           </span>
-          <span class="result-card-meta">${escapeHtml(hit.documentType)} · Version ${escapeHtml(hit.version)} · Relevance ${hit.score.toFixed(3)}</span>
+          <span class="result-card-meta">${escapeHtml(hit.documentType)} · Version ${escapeHtml(hit.version)} · Relevance ${hit.score.toFixed(3)} · ${escapeHtml(textMetadataLabel(hit.textMetadata))}</span>
           <span class="result-card-snippet">${highlightSnippet(hit.snippet, state.query)}</span>
           ${hit.textMissing ? '<span class="missing-label">Text extraction unavailable · open source</span>' : ''}
         </button>`).join('');
@@ -462,7 +471,10 @@
     byId('results').setAttribute('aria-busy', 'true');
     byId('results').innerHTML = '<div class="loading-line">Searching extracted text across the loan package…</div>';
     try {
-      const response = await api(`/api/search?q=${encodeURIComponent(query)}&page=${nextPage}&size=${state.pageSize}`, {
+      const documentType = byId('document-type-filter').value;
+      const params = new URLSearchParams({ q: query, page: String(nextPage), size: String(state.pageSize) });
+      if (documentType) params.set('documentType', documentType);
+      const response = await api(`/api/search?${params}`, {
         signal: state.searchController.signal,
       });
       if (requestId !== state.searchRequestId) return;
@@ -546,7 +558,8 @@
       byId('evidence-status').textContent = '';
       renderEvidence();
       byId('evidence-dialog-subtitle').textContent = `${page.documentTitle} · PDF page ${page.pageNumber}`;
-      byId('text-status').textContent = page.textMissing ? 'Text unavailable on this page' : 'Page text available';
+      byId('text-status').textContent = `${textMetadataLabel(page.textMetadata)} · ${page.textMetadata.nonWhitespaceCharacters.toLocaleString()} non-whitespace characters`;
+      byId('text-status').title = 'Quality is a heuristic based on text length, searchable-character ratio, and replacement characters; it is not OCR confidence.';
       byId('page-prev').disabled = pageNumber <= 1;
       byId('page-next').disabled = pageNumber >= state.package.manifest.pageCount;
     } catch (error) {
@@ -556,6 +569,21 @@
       state.evidenceMessage = 'This page text could not be loaded. Please try selecting the page again.';
       renderEvidence();
     }
+  }
+
+  function textMetadataLabel(metadata) {
+    const sources = {
+      LAYOUT: 'provided layout',
+      PDF_TEXT: 'PDF text extraction',
+      OCR: 'OCR',
+      NONE: 'no text source',
+    };
+    const quality = {
+      USABLE: 'usable text',
+      LOW: 'low-quality text',
+      NO_TEXT: 'no extracted text',
+    };
+    return `${sources[metadata?.source] || 'unknown source'} · ${quality[metadata?.quality] || 'quality unknown'}`;
   }
 
   byId('search-form').addEventListener('submit', (event) => {
@@ -571,6 +599,9 @@
     }
   });
   byId('clear-search').addEventListener('click', clearSearch);
+  byId('document-type-filter').addEventListener('change', () => {
+    if (byId('query').value.trim()) runSearch(0);
+  });
   document.querySelectorAll('[data-query]').forEach((button) => {
     button.addEventListener('click', () => {
       byId('query').value = button.dataset.query;

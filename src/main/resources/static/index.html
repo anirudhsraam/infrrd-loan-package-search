@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#111d33">
   <meta name="description" content="Infrrd mortgage document review workspace — search a loan package and navigate directly to source evidence.">
   <title>Infrrd · Mortgage Review Workspace</title>
-  <link rel="stylesheet" href="/styles.css?v=table-context-5">
+  <link rel="stylesheet" href="/styles.css?v=source-quality-filter-1">
 </head>
 <body>
 <header class="topbar">
@@ -41,6 +41,7 @@
       <div class="stat"><strong id="stat-documents">—</strong><span>Documents</span></div>
       <div class="stat"><strong id="stat-missing">—</strong><span>Pages without text</span></div>
       <div class="stat"><strong id="stat-indexed">—</strong><span>Indexed terms</span></div>
+      <div class="stat"><strong id="stat-low-quality">—</strong><span>Low-quality text pages</span></div>
     </div>
   </section>
 
@@ -63,6 +64,11 @@
             <button id="search-button" class="search-button" type="submit">Search</button>
           </div>
         </form>
+        <label class="type-filter-label" for="document-type-filter">Limit to document type
+          <select id="document-type-filter" disabled>
+            <option value="">All document types</option>
+          </select>
+        </label>
         <p class="search-guidance">Search across extracted page text and jump to the exact source page.</p>
         <div class="query-examples" aria-label="Search examples">
           <button type="button" data-query='"cash to close"'>Exact phrase</button>
@@ -173,6 +179,6 @@
   </div>
   <div id="expanded-page-text" class="page-text expanded-page-text" tabindex="0" role="region" aria-label="Expanded readable source page text"></div>
 </dialog>
-<script src="/app.js?v=table-context-5" defer></script>
+<script src="/app.js?v=source-quality-filter-1" defer></script>
 </body>
 </html>

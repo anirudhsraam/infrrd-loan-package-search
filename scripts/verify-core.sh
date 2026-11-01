@@ -5,8 +5,10 @@ OUT="$ROOT/target/core-check"
 mkdir -p "$OUT"
 javac -encoding UTF-8 -d "$OUT" \
   "$ROOT/src/main/java/ai/infrrd/loansearch/domain/PageRecord.java" \
+  "$ROOT/src/main/java/ai/infrrd/loansearch/domain/PageTextMetadata.java" \
   "$ROOT/src/main/java/ai/infrrd/loansearch/search/QuerySyntaxException.java" \
   "$ROOT/src/main/java/ai/infrrd/loansearch/search/QueryNode.java" \
+  "$ROOT/src/main/java/ai/infrrd/loansearch/search/SearchSynonyms.java" \
   "$ROOT/src/main/java/ai/infrrd/loansearch/search/TextTokenizer.java" \
   "$ROOT/src/main/java/ai/infrrd/loansearch/search/QueryParser.java" \
   "$ROOT/src/main/java/ai/infrrd/loansearch/search/SearchEngine.java" \
