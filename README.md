@@ -55,8 +55,8 @@ through the viewer toggle.
 Measured on the supplied 560-page corpus with OpenJDK 25.0.1 using the standalone search benchmark (one local process):
 
 - 560 physical pages; 280 pages have no extracted text; 161,253 indexed tokens and 6,571 unique terms.
-- Latest run: layout read + page mapping 120.471 ms; index build 272.431 ms; first search for `"cash to close"` 49.254 ms
-  (19 matching pages).
+- Latest run: layout read + page mapping 120.471 ms; index build 272.431 ms; first search for `"cash to close"` 49.254
+  ms (19 matching pages).
 - 25 identical warm repeats: 1.816 ms median and 3.670 ms p95; 27.1× median improvement over the first measured search.
 
 The HTTP benchmark (`scripts/ApiSearchBenchmark.ps1`) measures the actual API request, including catalog source
@@ -119,7 +119,8 @@ in-memory and is not persisted across restarts. Authentication and deployment ar
 
 ## Tests and validation
 
-There are 44 JUnit tests across the search, API, and package-catalog layers covering Boolean precedence, phrase position,
+There are 44 JUnit tests across the search, API, and package-catalog layers covering Boolean precedence, phrase
+position,
 wildcard validation/expansion and whole-token snippets, Unicode normalization, deterministic ranking/pagination, cache
 bounds, missing text, source-file refresh, invalid replacement recovery, manifest validation and size limits, path
 traversal, PDF extraction/provenance, and stage timings. Search quality tests
@@ -137,4 +138,4 @@ deployment testing.
 
 ## AI assistance
 
-GitHub Copilot was used for coding support. A concise session log is included as `AI_USAGE_LOG.txt`.
+GitHub Copilot was used for coding support.
