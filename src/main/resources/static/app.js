@@ -156,7 +156,7 @@
             return `<p class="evidence-page-line">${renderCell(block.text)}</p>`;
           }
           return `
-            <div class="evidence-table-wrap">
+            <div class="evidence-table-wrap" style="--column-count: ${block.headers.length}">
               <table class="evidence-table">
                 <caption class="sr-only">Extracted data table from the selected source page.</caption>
                 <thead><tr>${block.headers.map((header) => `<th scope="col">${renderCell(header)}</th>`).join('')}</tr></thead>
@@ -365,6 +365,7 @@
   function renderResults(response) {
     state.hits = response.hits || [];
     state.resultPage = response.page;
+    byId('results').setAttribute('aria-busy', 'false');
     byId('tab-result-count').textContent = response.totalHits.toLocaleString();
     byId('results-heading').textContent = response.totalHits
       ? `${response.totalHits.toLocaleString()} matching pages`
@@ -379,7 +380,7 @@
       byId('results').innerHTML = '<div class="rail-empty"><div class="empty-icon">⌕</div><strong>No matching pages</strong><p>Check the spelling or broaden the search using OR. Pages without extracted text cannot match text queries.</p></div>';
     } else {
       byId('results').innerHTML = state.hits.map((hit, index) => `
-        <button class="result-card ${state.selectedPage === hit.pageNumber ? 'is-selected' : ''}" type="button" data-result-index="${index}">
+        <button class="result-card ${state.selectedPage === hit.pageNumber ? 'is-selected' : ''}" type="button" data-result-index="${index}" aria-current="${state.selectedPage === hit.pageNumber ? 'page' : 'false'}">
           <span class="result-card-top">
             <span class="result-card-title">${escapeHtml(hit.documentTitle)}</span>
             <span class="page-pill">PAGE ${hit.pageNumber}</span>
@@ -392,8 +393,11 @@
         button.addEventListener('click', () => {
           const hit = state.hits[Number(button.dataset.resultIndex)];
           showPage(hit.pageNumber);
-          byId('results').querySelectorAll('.result-card').forEach((card) => card.classList.remove('is-selected'));
-          button.classList.add('is-selected');
+          byId('results').querySelectorAll('.result-card').forEach((card) => {
+            const selected = card === button;
+            card.classList.toggle('is-selected', selected);
+            card.setAttribute('aria-current', selected ? 'page' : 'false');
+          });
         });
       });
     }

@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -73,10 +74,13 @@ public class PackageCatalogService {
             if (!Files.isRegularFile(manifestPath)) {
                 throw new IllegalStateException("package.json not found in the configured project root.");
             }
-            if (Files.size(manifestPath) > MAX_MANIFEST_BYTES) {
-                throw new IllegalStateException("package.json exceeds the 4 MiB manifest limit.");
+            try (InputStream input = Files.newInputStream(manifestPath)) {
+                byte[] bytes = input.readNBytes((int) MAX_MANIFEST_BYTES + 1);
+                if (bytes.length > MAX_MANIFEST_BYTES) {
+                    throw new IllegalStateException("package.json exceeds the 4 MiB manifest limit.");
+                }
+                return bytes;
             }
-            return Files.readAllBytes(manifestPath);
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to read package.json: " + exception.getMessage(), exception);
         }

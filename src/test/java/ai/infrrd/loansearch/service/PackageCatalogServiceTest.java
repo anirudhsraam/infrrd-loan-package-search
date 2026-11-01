@@ -91,6 +91,14 @@ class PackageCatalogServiceTest {
         assertThrows(IllegalArgumentException.class, () -> catalog().snapshot());
     }
 
+    @Test void oversizedManifestIsRejectedWhileReading() throws Exception {
+        byte[] oversizedManifest = new byte[4 * 1024 * 1024 + 1];
+        Files.write(tempDir.resolve("package.json"), oversizedManifest);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> catalog().snapshot());
+        assertTrue(exception.getMessage().contains("exceeds the 4 MiB manifest limit"));
+    }
+
     @Test void omittedTextSectionsRemainAsPhysicalPages() throws Exception {
         prepareBasicFiles("data/layout.txt", "only first page text");
         Files.writeString(tempDir.resolve("package.json"), manifestJson("data/layout.txt"), StandardCharsets.UTF_8);
