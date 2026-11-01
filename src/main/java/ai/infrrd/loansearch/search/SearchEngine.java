@@ -3,7 +3,10 @@ package ai.infrrd.loansearch.search;
 import ai.infrrd.loansearch.domain.PageRecord;
 import ai.infrrd.loansearch.domain.PageTextMetadata;
 
+import java.text.Normalizer;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Positional inverted index with BM25 scoring and bounded query/result caches.
@@ -16,6 +19,7 @@ public final class SearchEngine {
     private static final int MAX_CACHED_QUERIES = 64;
     private static final int MAX_CACHED_HITS = 5_000;
     private static final int MAX_SNIPPET_CHARS = 220;
+    private static final Pattern SNIPPET_TOKEN_PATTERN = Pattern.compile("[\\p{L}\\p{N}]+");
     private static final double K1 = 1.2;
     private static final double B = 0.75;
 
@@ -88,7 +92,7 @@ public final class SearchEngine {
         if (node instanceof QueryNode.Not not) collectTerms(not.child(), out, !negative);
         else if (node instanceof QueryNode.Term term && !negative) out.add(term.value());
         else if (node instanceof QueryNode.Phrase phrase && !negative) out.addAll(phrase.terms());
-        else if (node instanceof QueryNode.Prefix prefix && !negative) out.add(prefix.value());
+        else if (node instanceof QueryNode.Prefix prefix && !negative) out.add(prefix.value() + "*");
         else if (node instanceof QueryNode.And and) {
             collectTerms(and.left(), out, negative);
             collectTerms(and.right(), out, negative);
@@ -102,11 +106,19 @@ public final class SearchEngine {
         if (text == null || text.isBlank())
             return "Text extraction is unavailable for this page. Open the PDF page to review the source.";
         if (terms.isEmpty()) return trimSnippet(text, 0);
-        String lower = text.toLowerCase(Locale.ROOT);
         int best = -1;
-        for (String term : terms) {
-            int at = lower.indexOf(term.toLowerCase(Locale.ROOT));
-            if (at >= 0 && (best < 0 || at < best)) best = at;
+        Matcher matcher = SNIPPET_TOKEN_PATTERN.matcher(text);
+        while (matcher.find()) {
+            String token = Normalizer.normalize(matcher.group(), Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
+            for (String queryTerm : terms) {
+                boolean prefix = queryTerm.endsWith("*");
+                String term = prefix ? queryTerm.substring(0, queryTerm.length() - 1) : queryTerm;
+                if ((prefix ? token.startsWith(term) : token.equals(term)) && (best < 0 || matcher.start() < best)) {
+                    best = matcher.start();
+                    break;
+                }
+            }
+            if (best >= 0) break;
         }
         return trimSnippet(text, Math.max(0, best));
     }

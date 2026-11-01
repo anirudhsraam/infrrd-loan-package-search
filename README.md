@@ -28,7 +28,9 @@ refresh and snapshot publication; `PackageManifestValidator` checks inputs and p
 extracted sections to physical pages; and the search package contains a tokenizer, recursive-descent parser, immutable
 query AST, and positional inverted index. `SearchEngine` is responsible for Boolean/phrase evaluation, BM25-style
 scoring, snippets, pagination, and bounded result caches. The UI consumes the API and keeps document navigation separate
-from search results.
+from search results. Search responses report search-engine stage timings separately from catalog check/refresh,
+search-handling, and controller-request timings. Snapshot build stages are labelled as measurements from the most
+recently built snapshot, and each response indicates whether that request rebuilt it.
 
 `package.json` is the source of truth for document type, version, and physical page ranges. Requests fingerprint the
 manifest, layout text, optional extraction-provenance report, and PDF file metadata. A source change triggers validation
@@ -50,16 +52,25 @@ through the viewer toggle.
 
 ## Performance and memory
 
-Measured on the supplied 560-page corpus with OpenJDK 25.0.1 using `./scripts/verify-core.sh` (plain-JDK benchmark;
-one local process, not an HTTP/load test):
+Measured on the supplied 560-page corpus with OpenJDK 25.0.1 using the standalone search benchmark (one local process):
 
 - 560 physical pages; 280 pages have no extracted text; 161,253 indexed tokens and 6,571 unique terms.
-- Latest run: layout read + page mapping 150.671 ms; index build 340.254 ms; first search for `"cash to close"` 58.487 ms
+- Latest run: layout read + page mapping 120.471 ms; index build 272.431 ms; first search for `"cash to close"` 49.254 ms
   (19 matching pages).
-- 25 identical warm repeats: 1.858 ms median and 4.313 ms p95; 31.5× median improvement over the first measured search.
+- 25 identical warm repeats: 1.816 ms median and 3.670 ms p95; 27.1× median improvement over the first measured search.
 
-Numbers are machine/JVM dependent. The first-search timing starts after index construction; build timings are reported
-separately in the UI and benchmark. Memory is bounded by limits of 20,000 pages, 64 MiB layout text, 4 MiB manifest,
+The HTTP benchmark (`scripts/ApiSearchBenchmark.ps1`) measures the actual API request, including catalog source
+validation and HTTP client latency. Run the application first, then execute
+`.\scripts\ApiSearchBenchmark.ps1 -WarmRepeats 25` in PowerShell. A fresh local run with the same JDK and corpus
+reported 1,220.216 ms cold client latency, 743.400 ms controller time (719.859 ms catalog access/refresh,
+23.510 ms search handling, and 21.548 ms search-engine time), and 19 matching pages. The 25 warm repeats reported
+26.099 ms median / 35.364 ms p95 client latency, 15.470 ms median controller time, 13.227 ms median catalog access,
+2.273 ms median search handling, and 2.142 ms median engine time.
+The cold request rebuilt the snapshot. Client latency includes one-time HTTP/JVM warmup; controller time excludes JSON
+serialization and network transport. Results are machine/JVM dependent; the controller measurements make the cost of
+per-request correctness checks visible instead of presenting search-engine cache time as total request time.
+
+Memory is bounded by limits of 20,000 pages, 64 MiB layout text, 4 MiB manifest,
 2,000,000 tokens, 100,000 unique terms, 128 prefix-cache entries (max 256 expansions each), 64 query-cache entries (max
 5,000 page IDs per query), and 100 results per API page. Requests over those bounds are rejected or safely degraded
 rather than allowed to grow caches without limit.
@@ -108,9 +119,10 @@ in-memory and is not persisted across restarts. Authentication and deployment ar
 
 ## Tests and validation
 
-There are 41 JUnit tests across the search, API, and package-catalog layers covering Boolean precedence, phrase position, wildcard
-validation/expansion, Unicode normalization, ranking/pagination, cache bounds, missing text, source-file refresh,
-manifest validation and size limits, path traversal, PDF extraction/provenance, and stage timings. Search quality tests
+There are 44 JUnit tests across the search, API, and package-catalog layers covering Boolean precedence, phrase position,
+wildcard validation/expansion and whole-token snippets, Unicode normalization, deterministic ranking/pagination, cache
+bounds, missing text, source-file refresh, invalid replacement recovery, manifest validation and size limits, path
+traversal, PDF extraction/provenance, and stage timings. Search quality tests
 use a small annotated mortgage-review query set and enforce top-three relevance thresholds. Run them with `mvn test`.
 The dependency-free
 search smoke checks and sample benchmark can be run with `bash scripts/verify-core.sh`; check the UI script syntax with
@@ -125,4 +137,4 @@ deployment testing.
 
 ## AI assistance
 
-GitHub Copilot was used for coding support.
+GitHub Copilot was used for coding support. A concise session log is included as `AI_USAGE_LOG.txt`.

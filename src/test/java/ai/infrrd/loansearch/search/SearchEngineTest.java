@@ -51,6 +51,25 @@ class SearchEngineTest {
         assertEquals(1, engine.search("sign*", 0, 20).totalHits());
     }
 
+    @Test void wildcardSnippetStartsAtAWholeMatchingToken() {
+        String text = "design " + "neutral ".repeat(50) + "signed borrower disclosure";
+        SearchEngine snippetEngine = new SearchEngine(List.of(page(1, text)));
+
+        var result = snippetEngine.search("sign*", 0, 10);
+
+        assertEquals(1, result.totalHits());
+        assertTrue(result.hits().getFirst().snippet().contains("signed"));
+        assertFalse(result.hits().getFirst().snippet().contains("design"));
+    }
+
+    @Test void equalScoresUsePhysicalPageOrderAsATieBreaker() {
+        SearchEngine tieEngine = new SearchEngine(List.of(page(2, "cash amount"), page(1, "cash amount")));
+
+        var result = tieEngine.search("cash", 0, 10);
+
+        assertEquals(List.of(1, 2), result.hits().stream().map(SearchEngine.SearchHit::pageNumber).toList());
+    }
+
     @Test void resultsAreRankedAndPaginationIsStable() {
         var first = engine.search("cash OR loan", 0, 2);
         var second = engine.search("cash OR loan", 1, 2);

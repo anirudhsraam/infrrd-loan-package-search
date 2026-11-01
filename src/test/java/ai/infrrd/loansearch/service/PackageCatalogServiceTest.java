@@ -121,8 +121,32 @@ class PackageCatalogServiceTest {
         prepareBasicFiles("data/layout.txt", "alpha page\fbravo page");
         Files.writeString(tempDir.resolve("package.json"), manifestJson("data/layout.txt"), StandardCharsets.UTF_8);
         PackageCatalogService catalog = catalog();
-        PackageSnapshot first = catalog.snapshot();
-        assertSame(first, catalog.snapshot());
+        PackageCatalogService.SnapshotAccess first = catalog.snapshotAccess();
+        PackageCatalogService.SnapshotAccess repeated = catalog.snapshotAccess();
+        assertTrue(first.rebuilt());
+        assertFalse(repeated.rebuilt());
+        assertSame(first.snapshot(), repeated.snapshot());
+        assertTrue(first.accessMs() >= 0);
+        assertTrue(repeated.accessMs() >= 0);
+    }
+
+    @Test void invalidReplacementIsNotPublishedAndAValidFollowupIsApplied() throws Exception {
+        prepareBasicFiles("data/layout-v1.txt", "alpha page\fneutral page");
+        Files.writeString(tempDir.resolve("data/layout-v2.txt"), "bravo page\fneutral page", StandardCharsets.UTF_8);
+        Path manifest = tempDir.resolve("package.json");
+        Files.writeString(manifest, manifestJson("data/layout-v1.txt"), StandardCharsets.UTF_8);
+        PackageCatalogService catalog = catalog();
+        PackageSnapshot original = catalog.snapshot();
+
+        Files.writeString(manifest, "{ invalid json", StandardCharsets.UTF_8);
+        assertThrows(IllegalArgumentException.class, catalog::snapshot);
+
+        Files.writeString(manifest, manifestJson("data/layout-v2.txt"), StandardCharsets.UTF_8);
+        PackageCatalogService.SnapshotAccess replacement = catalog.snapshotAccess();
+        assertTrue(replacement.rebuilt());
+        assertNotSame(original, replacement.snapshot());
+        assertEquals(0, replacement.snapshot().searchEngine().search("alpha", 0, 10).totalHits());
+        assertEquals(1, replacement.snapshot().searchEngine().search("bravo", 0, 10).totalHits());
     }
 
     @Test void layoutEditsRebuildTheIndexWithoutManifestChanges() throws Exception {

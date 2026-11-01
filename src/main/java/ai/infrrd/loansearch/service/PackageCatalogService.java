@@ -51,6 +51,11 @@ public class PackageCatalogService {
 
     /** Rechecks package source fingerprints on each request and rebuilds only when a source changes. */
     public PackageSnapshot snapshot() {
+        return snapshotAccess().snapshot();
+    }
+
+    public SnapshotAccess snapshotAccess() {
+        long accessStarted = System.nanoTime();
         long readStarted = System.nanoTime();
         byte[] manifestBytes = readManifestBytes();
         double manifestReadMs = elapsedMs(readStarted);
@@ -59,14 +64,14 @@ public class PackageCatalogService {
         PackageSnapshot snapshot = current;
         if (snapshot != null && snapshot.manifestHash().equals(manifestHash)
                 && snapshot.sourceFingerprint().equals(sourceFingerprint(snapshot.manifest(), manifestHash))) {
-            return snapshot;
+            return new SnapshotAccess(snapshot, elapsedMs(accessStarted), false);
         }
 
         synchronized (refreshMonitor) {
             snapshot = current;
             if (snapshot != null && snapshot.manifestHash().equals(manifestHash)
                     && snapshot.sourceFingerprint().equals(sourceFingerprint(snapshot.manifest(), manifestHash))) {
-                return snapshot;
+                return new SnapshotAccess(snapshot, elapsedMs(accessStarted), false);
             }
             PackageSnapshot replacement = buildSnapshot(manifestBytes, manifestHash, manifestReadMs);
             current = replacement; // Publish a complete immutable snapshot in one volatile write.
@@ -74,7 +79,7 @@ public class PackageCatalogService {
                     replacement.manifest().packageName(), replacement.manifest().pageCount(),
                     replacement.manifest().documents().size(), replacement.missingTextPages(),
                     replacement.searchEngine().indexedTokenCount(), replacement.totalBuildMs());
-            return replacement;
+            return new SnapshotAccess(replacement, elapsedMs(accessStarted), true);
         }
     }
 
@@ -222,6 +227,8 @@ public class PackageCatalogService {
     private static double elapsedMs(long startedNanos) {
         return (System.nanoTime() - startedNanos) / 1_000_000.0;
     }
+
+    public record SnapshotAccess(PackageSnapshot snapshot, double accessMs, boolean rebuilt) { }
 
     private static String sha256(byte[] bytes) {
         try {

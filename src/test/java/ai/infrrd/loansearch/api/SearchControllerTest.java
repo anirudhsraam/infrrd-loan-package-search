@@ -23,6 +23,10 @@ class SearchControllerTest {
         assertEquals("Loan Estimate", response.documentType());
         assertEquals(1, response.totalHits());
         assertEquals(1, response.hits().getFirst().pageNumber());
+        assertFalse(response.snapshotRebuilt());
+        assertTrue(response.catalogAccessMs() >= 0);
+        assertTrue(response.searchHandlingMs() >= 0);
+        assertTrue(response.requestTotalMs() >= response.searchHandlingMs());
     }
 
     @Test
@@ -48,8 +52,8 @@ class SearchControllerTest {
         PackageCatalogService catalog = new PackageCatalogService(
                 new ObjectMapper(), ".", "package.json", "data") {
             @Override
-            public PackageSnapshot snapshot() {
-                return snapshot;
+            public SnapshotAccess snapshotAccess() {
+                return new SnapshotAccess(snapshot, 1.25, false);
             }
         };
         return new SearchController(catalog);

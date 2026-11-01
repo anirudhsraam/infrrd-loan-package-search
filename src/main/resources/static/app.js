@@ -396,15 +396,19 @@
       ['Matching pages', timing.evaluationMs],
       ['Relevance ranking', timing.rankingMs],
       ['Snippet creation', timing.snippetMs],
-      ['Search total', timing.totalMs],
-      ['Manifest read', response.manifestReadMs],
-      ['Layout read', response.layoutReadMs],
-      ['Page mapping', response.pageMappingMs],
-      ['Index build', response.indexBuildMs],
-      ['Package build', response.totalBuildMs],
+      ['Search-engine total', timing.totalMs],
+      ['Catalog check / refresh', response.catalogAccessMs],
+      ['Search handling', response.searchHandlingMs],
+      ['Controller request total', response.requestTotalMs],
+      ['Snapshot rebuilt', response.snapshotRebuilt ? 'Yes' : 'No'],
+      ['Last build · Manifest read', response.manifestReadMs],
+      ['Last build · Layout read', response.layoutReadMs],
+      ['Last build · Page mapping', response.pageMappingMs],
+      ['Last build · Index build', response.indexBuildMs],
+      ['Last build · Snapshot construction', response.totalBuildMs],
     ];
     byId('timing-row').innerHTML = items.map(([label, value]) => `
-      <div class="timing-item"><span>${label}</span><strong>${Number(value).toFixed(2)} ms</strong></div>`).join('');
+      <div class="timing-item"><span>${label}</span><strong>${typeof value === 'number' ? `${value.toFixed(2)} ms` : value}</strong></div>`).join('');
     byId('performance-mode').textContent = timing.cacheHit ? 'CACHED' : 'FIRST PASS';
     byId('performance-panel').hidden = false;
   }
